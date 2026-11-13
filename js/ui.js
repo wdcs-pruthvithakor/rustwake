@@ -276,6 +276,10 @@ PANELS.planet = function (pid) {
     const why = G.canColonize(p), c = G.colonyPodCost();
     h += '<h3>UNCLAIMED</h3><p>A colony extracts this world\'s resources, houses population, and gives you somewhere safe to bank cargo and repair.</p>';
     if (sys.civ && S.civs[sys.civ] && !S.civs[sys.civ].dead && !S.civs[sys.civ].vassal) h += '<p class="warn">This is ' + esc(G.civById(sys.civ).name) + ' territory. Settling here will cost you standing with them.</p>';
+    const n = G.colonyCount(), ext = Object.keys(p.res).filter(r => r !== 'energy' && Object.values(G.BLD).some(b => b.ext && b.ext.includes(r) && (!b.req || G.has(b.req))));
+    const hab = G.planetHab(p), slots = Math.max(2, p.slots + (tr && tr.eff.slots || 0) + G.sysBonus(p.sys).slots + p.moons);
+    h += '<div class="trait"><b>Is it worth it?</b><span>' + slots + ' building slots · habitability ' + hab + '% (' + (hab >= 70 ? 'grows fast, big population' : hab >= 40 ? 'average population' : 'small population, slow growth') + ') · ' + (ext.length ? 'buildings here can extract ' + ext.map(rname).join(', ') : '<span class="bad">nothing your buildings can extract yet</span>') + '.</span></div>';
+    h += '<p class="dim">This would be colony #' + (n + 1) + '. Every colony makes the next pod 10% dearer and draws slightly more raider attention, wherever it is. A colony with no buildings only pays a trickle of credits, so plan to build on it.</p>';
     h += '<div class="row">' + costHTML(c) + ' ' + btn('Found colony', 'colonize', { id: pid }, why || !G.canAfford(c), 'big') + '</div>' + (why ? '<p class="bad">' + esc(why) + '</p>' : '');
   } else {
     const c = G.colonyCalc(col);
@@ -293,10 +297,12 @@ PANELS.planet = function (pid) {
         let eff = b.d;
         if (b.ext) eff = b.ext.filter(r => p.res[r]).map(r => ri(r) + G.RES[r].n + ' ' + G.stars(p.res[r])).join(' ');
         const pw = b.pw ? '<span class="' + (b.pw > 0 ? 'good' : 'dim') + '">' + (b.pw > 0 ? '+' : '') + b.pw + ' ⚡/lvl</span>' : '';
-        rows += '<tr class="' + (lvl ? 'has' : '') + '"><td><b>' + b.n + '</b> ' + (lvl ? '<span class="lvn">' + lvl + '</span>' : '') + '<br><span class="dim">' + eff + '</span> ' + pw + '</td><td class="r">' + (why === 'Max level' ? '<span class="dim">max</span>' : costHTML(cst)) + '</td><td class="r">' + btn(lvl ? 'Upgrade' : 'Build', 'build', { id: pid, b: id }, why || !G.canAfford(cst)) + (lvl && !b.max ? btn('Max', 'buildmax', { id: pid, b: id }, why || !G.canAfford(cst)) : '') + (why && why !== 'Max level' ? '<div class="why">' + why + '</div>' : '') + '</td></tr>';
+        rows += '<tr class="' + (lvl ? 'has' : '') + '"><td><b>' + b.n + '</b> ' + (lvl ? '<span class="lvn">' + lvl + '</span>' : '') + '<br><span class="dim">' + eff + '</span> ' + pw + '</td><td class="r">' + (why === 'Max level' ? '<span class="dim">max</span>' : costHTML(cst)) + '</td><td class="r">' + btn(lvl ? 'Upgrade' : 'Build', 'build', { id: pid, b: id }, why || !G.canAfford(cst)) + (lvl && !b.max ? btn('Max', 'buildmax', { id: pid, b: id }, why || !G.canAfford(cst)) : '') + (lvl ? btn('Demolish', 'demolish', { id: pid, b: id }, false, 'ghost') : '') + (why && why !== 'Max level' ? '<div class="why">' + why + '</div>' : '') + '</td></tr>';
       }
       if (rows) h += '<h4>' + cat.toUpperCase() + '</h4><table class="tbl">' + rows + '</table>';
     }
+    const only = G.colonyCount() <= 1;
+    h += '<h4>ABANDON</h4><p class="dim">Gives this world up: its buildings and people are lost. You get back ' + costHTML(G.abandonRefund()) + ' (half a pod), and every later pod gets 10% cheaper again.</p><div class="row">' + btn('Abandon colony', 'abandon', { id: pid }, only ? 'You cannot abandon your only colony' : false) + (only ? '<span class="dim">Not possible with only one colony.</span>' : '') + '</div>';
   }
   h += '</div></div>';
   return { title: (col ? 'COLONY — ' : 'PLANET — ') + esc(p.name), html: h };
@@ -307,6 +313,8 @@ PANELS.colonies = function () {
   let h = '<div class="statgrid">' + kv('Colonies', ids.length) + kv('Population', fmt((G.totalPop || 0) * 1e6)) + kv('Energy', G.fmtRate((G.enProd || 0) - (G.enCons || 0)) + ' (' + fmt(G.get('energy')) + ' / ' + fmt(G.energyCap || 0) + ')') + kv('Total defense', fmt(G.totalDef || 0)) + kv('Next colony pod', costHTML(G.colonyPodCost())) + '</div>';
   if (!ids.length) return { title: 'COLONIES', html: h + '<p class="empty">No colonies yet. Research Colonial Charter, then orbit a habitable planet (fly to it, press E) and found one.</p>' };
   if (G.has('governor')) h += '<div class="row">' + btn('Governors: all on', 'autoall', { v: 1 }) + btn('all off', 'autoall', { v: 0 }) + '</div>';
+  const idle = ids.filter(pid => !Object.keys(S.colonies[pid].b).length).length;
+  if (idle) h += '<p class="warn">' + idle + ' ' + (idle === 1 ? 'colony has' : 'colonies have') + ' no buildings and ' + (idle === 1 ? 'is' : 'are') + ' marked IDLE below. Open one to build on it, or abandon it to get half a pod back and make the next pod cheaper.</p>';
   // group by system
   const bySys = {}; for (const pid of ids) (bySys[S.colonies[pid].sys] = bySys[S.colonies[pid].sys] || []).push(S.colonies[pid]);
   const sysIds = Object.keys(bySys);
@@ -321,7 +329,7 @@ PANELS.colonies = function () {
     for (const col of bySys[sid]) {
       const p = G.planetById(col.pid), c = G.colonyCalc(col); let pr = ''; let n = 0;
       for (const k in c.prod) if (n++ < 5) pr += '<span class="cost">' + ri(k) + G.fmtRate(c.prod[k] * G.pwr) + '</span>';
-      h += '<div class="card colcard" data-a="planet" data-id="' + col.pid + '"><canvas data-planet="' + col.pid + '" width="120" height="90"></canvas><div><b>' + esc(p.name) + '</b> <span class="dim">' + G.PTYPES[p.type].n + '</span><br>' + bar(col.pop / c.popcap, '#7dffb0', fmt(col.pop * 1e6) + ' pop') + '<span class="dim">Slots ' + c.used + '/' + c.slots + ' · work ' + Math.round(c.eff * 100) + '%' + (col.auto ? ' · auto' : '') + '</span><div class="prodline">' + pr + '</div></div></div>';
+      h += '<div class="card colcard" data-a="planet" data-id="' + col.pid + '"><canvas data-planet="' + col.pid + '" width="120" height="90"></canvas><div><b>' + esc(p.name) + '</b> <span class="dim">' + G.PTYPES[p.type].n + '</span><br>' + bar(col.pop / c.popcap, '#7dffb0', fmt(col.pop * 1e6) + ' pop') + (c.used ? '' : '<span class="bad">IDLE · </span>') + '<span class="dim">Slots ' + c.used + '/' + c.slots + ' · work ' + Math.round(c.eff * 100) + '%' + (col.auto ? ' · auto' : '') + '</span><div class="prodline">' + pr + '</div></div></div>';
     }
     h += '</div>';
   }
@@ -523,7 +531,7 @@ PANELS.asc = function () {
 PANELS.settings = function () {
   const S = G.S;
   let h = '<div class="cols"><div class="card grow"><h3>CONTROLS</h3>' + kv('<kbd>W A S D</kbd> / arrows', 'Fly') + kv('<kbd>Shift</kbd>', 'Afterburner (uses energy)') + kv('<kbd>Space</kbd>', 'Mine nearest asteroid') + kv('<kbd>E</kbd>', 'Orbit / dock / investigate') + kv('<kbd>Q</kbd>', 'Nova burst (25 energy, 18s cooldown)') + kv('<kbd>M</kbd>', 'Galaxy map') + kv('<kbd>2</kbd>–<kbd>0</kbd>', 'Panels') + kv('Mouse wheel', 'Zoom') + kv('Click', 'Fly there, or focus a hostile') +
-    '<h3>HOW NOT TO DIE</h3><p class="dim">Wild systems track your <b>signature</b>. It climbs while you linger and climbs faster while you mine. At 100% a wave finds you, and each wave is bigger than the last. Mine, then move. Your own systems and friendly territory are safe harbour. You cannot jump with hostiles close by, so run first. Dying costs your cargo and a tenth of your credits. Do not fly into the star.</p></div>';
+    '<h3>HOW NOT TO DIE</h3><p class="dim">Wild systems track your <b>signature</b>. It climbs while you linger and climbs faster while you mine. At 100% a wave finds you, and each wave is bigger than the last. Mine, then move. Your own systems and friendly territory are safe harbour. You cannot jump with hostiles close by, so run first. Dying costs your cargo and a tenth of your credits (never more than two minutes of credit income). Do not fly into the star.</p></div>';
   h += '<div class="card grow"><h3>GAME</h3><label class="chk" data-a="set" data-k="sfx"><i class="' + (S.set.sfx ? 'on' : '') + '"></i> Sound effects</label><label class="chk" data-a="set" data-k="music"><i class="' + (S.set.music ? 'on' : '') + '"></i> Ambient drone</label><label class="chk" data-a="set" data-k="shake"><i class="' + (S.set.shake ? 'on' : '') + '"></i> Screen shake</label>';
   h += '<div class="row wrap">' + btn('Save now', 'save') + btn('Export save', 'export') + btn('Import save', 'import') + btn('Wipe everything', 'wipe', null, false, 'danger') + '</div><textarea id="savebox" placeholder="Exported saves appear here. Paste one and press Import."></textarea>';
   h += '<p class="dim">Universe seed ' + S.seed + ' · everything is stored in this browser only. The galaxy is generated from the seed; only your changes are saved.</p></div></div>';
@@ -557,6 +565,15 @@ UI.act = function (a, d, node) {
     case 'comp': { const i = S.active.indexOf(d.id); if (i >= 0) S.active.splice(i, 1); else if (S.active.length < G.compSlots()) S.active.push(d.id); G.dirty = true; break; }
     case 'automine': S.set.autoMine = !S.set.autoMine; break;
     case 'planet': UI.open('planet', d.id); return;
+    case 'demolish': {
+      const col = S.colonies[d.id]; if (!col || !col.b[d.b]) break;
+      if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; const r = G.demolishRefund(d.b, col.b[d.b]); node.textContent = 'Sure? Refund ' + Object.keys(r).map(k => G.fmt(r[k]) + ' ' + G.RES[k].n).join(', '); return; }
+      G.demolish(d.id, d.b); break;
+    }
+    case 'abandon': {
+      if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = 'Really abandon? Click again.'; return; }
+      if (G.abandonColony(d.id)) { if (F.sys) F.safe = F.isSafe(); UI.open('colonies'); return; } break;
+    }
     case 'colonize': { const p = G.planetById(d.id); if (G.colonize(p)) { UI.dock(); if (F.sys) F.safe = true; } break; }
     case 'build': if (!G.build(d.id, d.b)) quiet = true; break;
     case 'buildmax': { let n = 0; while (n < 100 && G.build(d.id, d.b)) n++; if (n) say('Raised ' + G.BLD[d.b].n + ' by ' + n + ' level' + (n > 1 ? 's' : '') + '.'); else quiet = true; break; }
@@ -636,7 +653,8 @@ PANELS.guide = function () {
     h += sec('Resource shapes', '<p>The colour tells you which resource; the shape tells you how rare it is.</p><div class="legend">' + ['common', 'uncommon', 'rare', 'legendary', 'refined', 'advanced', 'exotic'].map(t => { const id = G.RES_ORDER.find(r => G.RES[r].t === t); return '<span>' + ri(id) + G.TIER_NAME[t] + '</span>'; }).join('') + '</div><p class="dim">Every cost in the game names the resource next to the number. Red means you do not have enough banked.</p>');
     h += sec('Controls', kv(T ? 'Left stick' : '<kbd>W A S D</kbd> / arrows / click', 'Fly') + kv(k('Space', 'MINE') + ' hold', 'Mine the nearest rock') + kv(k('E', 'tap the prompt'), 'Orbit, dock, investigate') + kv(k('Shift', 'BOOST') + ' hold', 'Afterburner, burns energy') + kv(k('Q', 'NOVA'), 'Area blast: 25 energy, 18s cooldown') + kv(T ? 'Pinch' : 'Mouse wheel', 'Zoom') + kv(T ? 'Tap a hostile' : 'Click a hostile', 'Focus fire on it') + (T ? kv('<kbd>MENU</kbd>', 'All panels') : kv('<kbd>M</kbd> <kbd>2</kbd>–<kbd>0</kbd> <kbd>H</kbd>', 'Map, panels, this guide')));
   } else if (tab === 'colony') {
-    h += sec('What a colony needs', '<p><b>Slots</b>: each kind of building takes one slot; levels are unlimited. Bigger planets and moons mean more slots.</p><p><b>Workers</b>: every building level needs 1M population. If "Workforce" is under 100%, build Habitats (or wait: population grows toward its housing cap, faster on habitable worlds).</p><p><b>Energy</b>: most buildings draw energy; Solar Farms make it. If the empire-wide energy store hits zero, everything slows. The warning appears top-centre.</p><p><b>Richness</b>: the stars beside each resource. A Mine on a ★★★★ iron world makes four times what it does on ★.</p>');
+    h += sec('What a colony needs', '<p><b>Slots</b>: each kind of building takes one slot; levels are unlimited. Bigger planets and moons mean more slots. Changed your mind? <b>Demolish</b> a building to free its slot and get half of what you spent on it back.</p><p><b>Workers</b>: every building level needs 1M population. If "Workforce" is under 100%, build Habitats (or wait: population grows toward its housing cap, faster on habitable worlds).</p><p><b>Energy</b>: most buildings draw energy; Solar Farms make it. If the empire-wide energy store hits zero, everything slows. The warning appears top-centre.</p><p><b>Richness</b>: the stars beside each resource. A Mine on a ★★★★ iron world makes four times what it does on ★.</p>');
+    h += sec('Which worlds to settle', '<p>Distance from home does not matter: a far colony costs and produces the same as a near one. What matters is the planet. Each colony makes the next pod 10% dearer and draws a little more raider attention, so a colony with no buildings is a cost. Pick worlds with resources you need, good habitability and plenty of slots, and build on them. The planet screen sums this up under "Is it worth it?".</p><p>A colony you regret can be abandoned from its screen: you get back half a pod and the next pod gets cheaper again.</p>');
     h += sec('Production chains', '<p>Raw ore is turned into better materials by Industry buildings, and those feed the next tier:</p><p class="chain">Iron → Steel → Advanced Alloy → Nanomaterial → Quantum Material</p><p class="chain">Hydrogen → Fusion Fuel → Antimatter → Exotic Energy</p><p class="chain">Crystal → Refined Crystal → Quantum Crystal → Neural Crystal</p><p>A converter only runs if its inputs are in stock. If a number on the top bar is red and negative, something is eating that resource faster than you make it: build more of whatever produces it.</p>');
     h += sec('Automation', '<p>Research in the Industry branch removes the chores: <b>Mining Drones</b> mine beside you, <b>Mining Rigs</b> (Megastructures panel) farm a belt forever, <b>Quantum Uplink</b> banks cargo instantly, <b>AI Governors</b> build colonies for you, and <b>Von Neumann Probes</b> found new ones.</p><p>Colonies keep producing while the game is closed, at reduced efficiency, for up to 12 hours.</p>');
   } else if (tab === 'fight') {

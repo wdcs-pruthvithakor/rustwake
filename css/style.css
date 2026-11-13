@@ -249,3 +249,5 @@ body.compact #dbody { padding: 18px; } body.compact .etext { font-size: 14px; }
 #mission em { display: block; margin-top: 2px; }
 body.touch #prompt { bottom: 176px; }
 body.touch.short #prompt { bottom: auto; top: 46%; }
+.b.ghost { background: transparent; border-color: rgba(255,120,120,0.25); color: #d9a0a0; font-size: 11px; padding: 4px 8px; }
+.b.ghost:hover { border-color: rgba(255,120,120,0.6); color: #ffc0c0; }

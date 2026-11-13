@@ -146,6 +146,7 @@ F.enter = function (sys, jumped) {
   F.safe = isSafe();
   if (G.render) G.render.newSystem(sys);
 };
+F.isSafe = () => isSafe();
 function isSafe() {
   const sys = F.sys, S = G.S;
   if (F.erased) return false;

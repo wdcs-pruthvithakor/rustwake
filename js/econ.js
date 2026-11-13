@@ -231,6 +231,18 @@ G.colonize = function (p, free) {
   if (!free) G.log('Colony founded on ' + p.name + '.', 'good');
   return true;
 };
+/* Give a colony up. Refunds half of what a pod would cost afterwards, and lowers the price of the next pod. */
+G.abandonRefund = function () { const c = G.scaleCost({ iron: 150, copper: 40, crystal: 50 }, Math.pow(1.1, Math.max(0, G.colonyCount() - 1)) * G.mult('cost')); for (const k in c) c[k] = Math.floor(c[k] / 2); return c; };
+G.abandonColony = function (pid) {
+  const S = G.S, col = S.colonies[pid]; if (!col) return false;
+  if (G.colonyCount() <= 1) return false;
+  const ref = G.abandonRefund();
+  delete S.colonies[pid];
+  for (const k in ref) G.add(k, ref[k]);
+  G.dirty = true;
+  G.log('Colony on ' + G.planetById(pid).name + ' abandoned.', 'warn');
+  return true;
+};
 G.colonySlots = function (col) {
   const p = G.planetById(col.pid), tr = p.trait && G.TRAITS[p.trait];
   return Math.max(2, p.slots + (tr && tr.eff.slots || 0) + G.sysBonus(col.sys).slots + p.moons);
@@ -251,6 +263,14 @@ G.build = function (pid, id) {
   const col = G.S.colonies[pid]; if (!col || G.canBuild(col, id)) return false;
   if (!G.pay(G.bldCost(id, col.b[id] || 0))) return false;
   col.b[id] = (col.b[id] || 0) + 1; G.dirty = true; return true;
+};
+/* Tear a building down: frees its slot and refunds half of everything spent on its levels. */
+G.demolishRefund = function (id, lvl) { const out = {}; for (let l = 0; l < lvl; l++) { const c = G.bldCost(id, l); for (const k in c) out[k] = (out[k] || 0) + c[k]; } for (const k in out) out[k] = Math.floor(out[k] / 2); return out; };
+G.demolish = function (pid, id) {
+  const col = G.S.colonies[pid]; if (!col || !col.b[id]) return false;
+  const ref = G.demolishRefund(id, col.b[id]); delete col.b[id];
+  for (const k in ref) G.add(k, ref[k]);
+  G.dirty = true; return true;
 };
 /* Everything one colony does per second, before global energy limits. */
 G.colonyCalc = function (col) {
