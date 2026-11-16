@@ -30,6 +30,34 @@ G.canJump = function (sys) {
   if (G.flight && G.flight.hostileNear(650)) return 'Hostiles too close to spool the drive';
   return null;
 };
+/* Route planning: fewest jumps to a charted system, through charted systems only. */
+G.route = function (toId) {
+  const S = G.S, from = G.here(), to = toId && G.sysById(toId); if (!to || toId === S.loc || !S.ship.ftl) return null;
+  const R = G.shipStats().jump; if (!(R > 0)) return null;
+  const kn = Object.keys(S.known), key = S.loc + '|' + toId + '|' + Math.round(R) + '|' + kn.length + '|' + (S.silence.on ? Math.round(S.silence.r) : 0);
+  if (G._route && G._route.key === key) return G._route.path;
+  const ok = s => S.known[s.id] && (s.id === toId || S.tech.trn2 || !G.isErased(s.cx, s.cy));
+  const useList = Math.pow(2 * R / G.CELL, 2) > kn.length, all = useList ? kn.map(G.sysById).filter(Boolean) : null;
+  const near = s => useList ? all.filter(t => Math.hypot(t.x - s.x, t.y - s.y) <= R) : G.systemsNear(s.x, s.y, R);
+  const h = s => Math.hypot(s.x - to.x, s.y - to.y) / R;
+  const open = [[h(from), 0, from.id]], g = {}, prev = {}; g[from.id] = 0; let n = 0, found = false;
+  while (open.length && n++ < 5000) {
+    let bi = 0; for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+    const cur = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+    if (cur[1] > g[cur[2]]) continue;
+    if (cur[2] === toId) { found = true; break; }
+    const s = G.sysById(cur[2]);
+    for (const t of near(s)) {
+      if (t.id === s.id || !ok(t)) continue;
+      const c = cur[1] + 1 + Math.hypot(t.x - s.x, t.y - s.y) / R * 0.01;
+      if (g[t.id] === undefined || c < g[t.id]) { g[t.id] = c; prev[t.id] = s.id; open.push([c + h(t), c, t.id]); }
+    }
+  }
+  let path = null;
+  if (found) { path = []; for (let id = toId; id !== from.id; id = prev[id]) path.unshift(id); }
+  G._route = { key, path }; return path;
+};
+G.nextHop = function () { const p = G.S.dest && G.route(G.S.dest); return p && p.length ? p[0] : null; };
 G.reveal = function (sys) {
   const st = G.shipStats(); let obs = 0;
   for (const pid in G.S.colonies) obs += G.S.colonies[pid].b.observatory || 0;
@@ -50,6 +78,7 @@ G.arrive = function (sys, jumped) {
   if (sys.level > S.stats.maxLevel) S.stats.maxLevel = sys.level;
   if (first && !sys.home) { G.add('sci', 4 + sys.level * 2); G.compXP(3 + sys.level); }
   if (sys.civ) G.meet(sys.civ);
+  if (S.dest === sys.id) { S.dest = null; G.log('Arrived at your destination, ' + sys.name + '.', 'good'); }
   if (G.flight) G.flight.enter(sys, jumped);
   if (jumped && G.sfx) G.sfx('jump');
   // arrival events

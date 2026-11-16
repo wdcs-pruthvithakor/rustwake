@@ -134,6 +134,18 @@ MP.draw = function () {
     ctx.font = '500 11px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('SIGNAL', px, py - 16);
     if (px < 0 || py < 0 || px > W || py > H) { const a = Math.atan2(py - H / 2, px - W / 2); ctx.save(); ctx.translate(W / 2 + Math.cos(a) * (W / 2 - 60), H / 2 + Math.sin(a) * (H / 2 - 60)); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, 9); ctx.lineTo(-8, -9); ctx.fill(); ctx.restore(); }
   }
+  // planned route
+  if (S.dest) {
+    const p = G.route(S.dest);
+    if (p) {
+      ctx.strokeStyle = 'rgba(255,215,106,0.85)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t * 10;
+      ctx.beginPath(); ctx.moveTo(hx, hy); for (const id of p) { const s = G.sysById(id); ctx.lineTo(X(s.x), Y(s.y)); } ctx.stroke(); ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      ctx.fillStyle = '#ffd76a'; for (const id of p) { const s = G.sysById(id); ctx.beginPath(); ctx.arc(X(s.x), Y(s.y), 3.5, 0, TAU); ctx.fill(); }
+    }
+    const ds = G.sysById(S.dest), dx = X(ds.x), dy = Y(ds.y);
+    ctx.strokeStyle = '#ffd76a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(dx, dy, 17 + 2 * Math.sin(t * 3), 0, TAU); ctx.stroke();
+    ctx.font = '500 11px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffd76a'; ctx.fillText('DESTINATION', dx, dy - 24);
+  }
   // you are here
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; const pr = 10 + 2 * Math.sin(t * 4);
   ctx.beginPath(); ctx.arc(hx, hy, pr, 0, TAU); ctx.stroke();

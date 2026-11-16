@@ -111,7 +111,10 @@ UI.hud = function () {
   else sb += '<div class="sig' + (F.heat > 70 ? ' hot' : '') + '">' + bar(F.heat / 100, F.heat > 70 ? '#ff4a5c' : '#ff9a4a', 'SIGNATURE ' + Math.floor(F.heat) + '%' + (F.wave ? ' · wave ' + F.wave : '')) + '</div>';
   sb += '<div class="abil"><span class="' + (F.abilityCd > 0 ? 'cd' : 'rdy') + '"><kbd>Q</kbd> Nova ' + (F.abilityCd > 0 ? Math.ceil(F.abilityCd) + 's' : 'ready') + '</span><span><kbd>Shift</kbd> Boost</span></div>';
   if (S.active.length) sb += '<div class="pets">' + S.active.map(id => '<span title="' + esc(G.compName(id)) + '">' + esc(G.COMP[id].n) + ' ' + S.comp[id].lvl + '</span>').join('') + '</div>';
-  el.shipbox.innerHTML = sb;
+  if (!el.sbMain) { el.shipbox.innerHTML = '<div></div><div></div>'; el.sbMain = el.shipbox.children[0]; el.sbDest = el.shipbox.children[1]; }
+  el.sbMain.innerHTML = sb;
+  const dl = destLine(); if (dl !== el.sbDestHTML) { el.sbDestHTML = dl; el.sbDest.innerHTML = dl; } // only redraw when it changes, so taps land
+  if (UI.compact) { const b = Math.max(el.shipbox.getBoundingClientRect().bottom, el.mission.getBoundingClientRect().bottom); el.toasts.style.top = Math.round(b + 8) + 'px'; } else el.toasts.style.top = '';
   // objective
   const m = G.MISSIONS[S.mission];
   el.mission.innerHTML = m ? '<h4>OBJECTIVE <span>' + (S.mission + 1) + ' / ' + G.MISSIONS.length + '</span></h4><b>' + esc(m.t) + '</b><p>' + esc(typeof m.d === 'function' ? m.d() : m.d) + '</p>' + (m.p ? '<em>' + esc(m.p()) + '</em>' : '') : '';
@@ -134,10 +137,27 @@ UI.hud = function () {
 };
 
 /* ---------- map side panel ---------- */
+function destLine() {
+  const S = G.S; if (!S.dest) return '';
+  const d = G.sysById(S.dest), p = G.route(S.dest), nx = p && p[0] && G.sysById(p[0]);
+  let h = '<div class="dest"><div class="dt" data-a="destmap">⟶ <b>' + esc(d.name) + '</b> · ' + (p ? p.length + ' jump' + (p.length > 1 ? 's' : '') : 'no charted route') + '</div>';
+  if (nx) h += '<button class="b dj" data-a="destjump">JUMP ▸ ' + esc(nx.name) + (G.touch ? '' : ' <kbd>J</kbd>') + '</button>';
+  return h + '</div>';
+}
+function routeHTML(s) {
+  const S = G.S; if (s.id === S.loc) return '';
+  const p = G.route(s.id), isDest = S.dest === s.id, dp = S.dest && !isDest && G.route(S.dest), at = dp ? dp.indexOf(s.id) : -1;
+  if (at >= 0) return '<p class="epic">Stop ' + (at + 1) + ' of ' + dp.length + ' on your route to ' + esc(G.sysById(S.dest).name) + '.</p><div class="row">' + btn('Clear destination', 'destclear') + '</div>';
+  let h = kv('Route', p ? p.length + ' jump' + (p.length > 1 ? 's' : '') + (p.length > 1 ? ' via ' + esc(G.sysById(p[0]).name) + (p.length > 2 ? '…' : '') : '') : '<span class="bad">no charted route</span>');
+  if (!p && S.ship.ftl) h += '<p class="dim">No chain of charted systems within your jump range reaches it. Chart more systems on the way (scanner range) or upgrade the jump drive.</p>';
+  h += '<div class="row">' + (isDest ? btn('Clear destination', 'destclear') : btn('Set as destination', 'dest', { id: s.id }, p ? false : 'No charted route')) + '</div>';
+  return h;
+}
 UI.mapInfo = function (s) {
   const S = G.S, el = UI.el.mapinfo;
   if (!s) {
     el.innerHTML = '<h3>GALAXY MAP</h3><p class="dim">' + (G.touch ? 'Drag to pan, pinch to zoom. Tap a star, then JUMP.' : 'Drag to pan, scroll to zoom. Click a star, then JUMP.') + '</p>' + kv('Systems visited', fmt(Object.keys(S.visited).length)) + kv('Systems charted', fmt(Object.keys(S.known).length)) + kv('Jump range', fmt(G.shipStats().jump)) + kv('Scanner range', fmt(G.shipStats().scan)) + kv('Colonies', G.colonyCount()) +
+      (S.dest ? '<h3>DESTINATION</h3>' + kv('System', esc(G.sysById(S.dest).name)) + routeHTML(G.sysById(S.dest)) + (G.nextHop() ? '<div class="row">' + btn('JUMP TO NEXT: ' + esc(G.sysById(G.nextHop()).name), 'jump', { id: G.nextHop() }, G.canJump(G.sysById(G.nextHop())) || false, 'big') + '</div>' + (G.canJump(G.sysById(G.nextHop())) ? '<p class="bad">' + esc(G.canJump(G.sysById(G.nextHop()))) + '</p>' : '') : '') : '<p class="dim">Pick any charted star and press <b>Set as destination</b> to plan a route of jumps to it.</p>') +
       '<p class="dim">The dashed blue ring is how far you can jump. Danger rises with distance from home, without limit.</p>' + (G.megaCountOf('stargate') > 1 ? '<p class="dim">Stargates link to each other at any distance.</p>' : '');
     return;
   }
@@ -157,7 +177,7 @@ UI.mapInfo = function (s) {
     if (sd.mega) h += kv('Megastructures', Object.keys(sd.mega).map(k => G.MEGA[k].n).join(', '));
   }
   const sig = G.signalTarget(); if (sig && sig.id === s.id) h += '<p class="epic">The signal comes from here.</p>';
-  if (s.id !== S.loc) h += '<div class="row">' + btn('JUMP', 'jump', { id: s.id }, why || false, 'big') + '</div>' + (why ? '<p class="bad">' + esc(why) + '</p>' : '');
+  if (s.id !== S.loc) { const nh = S.dest === s.id && G.nextHop(); if (nh && nh !== s.id) { const w2 = G.canJump(G.sysById(nh)); h += '<div class="row">' + btn('JUMP TO NEXT: ' + esc(G.sysById(nh).name), 'jump', { id: nh }, w2 || false, 'big') + '</div>' + (w2 ? '<p class="bad">' + esc(w2) + '</p>' : ''); } else h += '<div class="row">' + btn('JUMP', 'jump', { id: s.id }, why || false, 'big') + '</div>' + (why && why !== 'Out of jump range' ? '<p class="bad">' + esc(why) + '</p>' : why ? '<p class="dim">Out of jump range: set it as your destination to plan a route.</p>' : ''); h += routeHTML(s); }
   else h += '<p class="dim">You are here.</p>';
   el.innerHTML = h;
 };
@@ -292,6 +312,7 @@ PANELS.planet = function (pid) {
     let pr = ''; for (const k in c.prod) pr += '<span class="cost">' + ri(k) + G.fmtRate(c.prod[k] * G.pwr) + '</span>';
     h += '<div class="prodline">' + pr + '</div>';
     const iss = colIssues(col, c); if (iss.length) h += '<div class="iss">' + iss.join('<br>') + '</div>';
+    if (col.sys !== S.loc) h += '<div class="row">' + (S.dest === col.sys ? btn('Clear course', 'destclear') : btn('Set course here', 'dest', { id: col.sys }, G.route(col.sys) ? false : 'No charted route')) + '<span class="dim">' + (G.route(col.sys) ? G.route(col.sys).length + ' jump(s) away · megastructures are built while you are in the system' : 'no charted route yet') + '</span></div>';
     if (G.has('governor')) {
       h += '<label class="chk" data-a="auto" data-id="' + pid + '"><i class="' + (col.auto ? 'on' : '') + '"></i> AI Governor builds here automatically</label>';
       h += GOV_D; if (col.auto) h += '<p class="dim">Governor now: ' + esc(col.gov || 'thinking…') + '</p>';
@@ -371,11 +392,11 @@ PANELS.colonies = function (only) {
   if (sysIds.length > 12) { // empire is big: summarise by system
     h += '<table class="tbl"><tr><th>System</th><th class="r">Problems</th><th>Sector</th><th class="r">Worlds</th><th class="r">Population</th><th class="r">Megastructures</th><th></th></tr>';
     const pg = UI.tab.colpage || 0, per = 40;
-    for (const sid of sysIds.slice(pg * per, pg * per + per)) { const sys = G.sysById(sid), cols = bySys[sid]; let pop = 0; for (const c of cols) pop += c.pop; const m = S.sd[sid] && S.sd[sid].mega; let bad = 0; for (const c of cols) if (colIssues(c, G.colonyCalc(c)).some(x => x.indexOf('dim') < 0)) bad++; h += '<tr><td><b>' + esc(sys.name) + '</b> <span class="dim">L' + sys.level + '</span></td><td class="r">' + (bad ? '<span class="bad">' + bad + ' ⚠</span>' : '<span class="dim">—</span>') + '</td><td class="dim">' + G.sectorName(sys.cx, sys.cy) + '</td><td class="r">' + cols.length + '</td><td class="r">' + fmt(pop * 1e6) + '</td><td class="r">' + (m ? Object.keys(m).length : '—') + '</td><td class="r">' + btn('Open', 'colsys', { id: sid }) + '</td></tr>'; }
+    for (const sid of sysIds.slice(pg * per, pg * per + per)) { const sys = G.sysById(sid), cols = bySys[sid]; let pop = 0; for (const c of cols) pop += c.pop; const m = S.sd[sid] && S.sd[sid].mega; let bad = 0; for (const c of cols) if (colIssues(c, G.colonyCalc(c)).some(x => x.indexOf('dim') < 0)) bad++; h += '<tr><td><b>' + esc(sys.name) + '</b> <span class="dim">L' + sys.level + '</span></td><td class="r">' + (bad ? '<span class="bad">' + bad + ' ⚠</span>' : '<span class="dim">—</span>') + '</td><td class="dim">' + G.sectorName(sys.cx, sys.cy) + '</td><td class="r">' + cols.length + '</td><td class="r">' + fmt(pop * 1e6) + '</td><td class="r">' + (m ? Object.keys(m).length : '—') + '</td><td class="r">' + btn('Open', 'colsys', { id: sid }) + (sid === S.loc ? '' : btn(S.dest === sid ? 'Clear course' : 'Set course', S.dest === sid ? 'destclear' : 'dest', { id: sid })) + '</td></tr>'; }
     h += '</table>'; if (sysIds.length > per) h += '<div class="row">' + btn('◂ Prev', 'colpage', { d: -1 }, pg <= 0) + '<span class="dim">Page ' + (pg + 1) + ' / ' + Math.ceil(sysIds.length / per) + '</span>' + btn('Next ▸', 'colpage', { d: 1 }, (pg + 1) * per >= sysIds.length) + '</div>';
   } else for (const sid of sysIds) {
     const sys = G.sysById(sid);
-    h += '<h4>' + esc(sys.name).toUpperCase() + ' <span class="dim">· ' + sys.star.n + ' · danger ' + sys.level + (sid === S.loc ? ' · you are here' : '') + '</span></h4><div class="grid">';
+    h += '<h4>' + esc(sys.name).toUpperCase() + ' <span class="dim">· ' + sys.star.n + ' · danger ' + sys.level + (sid === S.loc ? ' · you are here' : '') + '</span>' + (sid === S.loc ? '' : S.dest === sid ? ' ' + btn('Clear course', 'destclear') : ' ' + btn('Set course', 'dest', { id: sid }, G.route(sid) ? false : 'No charted route')) + '</h4><div class="grid">';
     for (const col of bySys[sid]) {
       const p = G.planetById(col.pid), c = G.colonyCalc(col), iss = colIssues(col, c); let pr = ''; let n = 0;
       for (const k in c.prod) if (n++ < 5) pr += '<span class="cost">' + ri(k) + G.fmtRate(c.prod[k] * G.pwr) + '</span>';
@@ -619,6 +640,10 @@ UI.act = function (a, d, node) {
     case 'planet': if (UI.panel) UI.go('planet', d.id); else UI.open('planet', d.id); return;
     case 'colsys': UI.go('colonies', d.id); return;
     case 'back': UI.back(); return;
+    case 'dest': { if (!G.route(d.id)) { say('No charted route there yet.'); break; } S.dest = d.id; const n = G.route(d.id).length; G.log('Course set for ' + G.sysById(d.id).name + ': ' + n + ' jump' + (n > 1 ? 's' : '') + '.', 'good'); if (G.map.open) { UI.mapInfo(G.map.sel); return; } break; }
+    case 'destclear': S.dest = null; if (G.map.open) { UI.mapInfo(G.map.sel); return; } break;
+    case 'destjump': { const n = G.nextHop(); if (!n) break; const why = G.canJump(G.sysById(n)); if (why) UI.toast(why, 'bad'); else G.jump(n); return; }
+    case 'destmap': { UI.open('map'); const n = G.nextHop(); G.map.sel = n ? G.sysById(n) : null; UI.mapInfo(G.map.sel); return; }
     case 'reserve': S.set.reserve = +d.v; break;
     case 'probes': S.set.probes = S.set.probes !== true; break;
     case 'govnew': S.set.govNew = S.set.govNew !== true; break;
@@ -643,7 +668,7 @@ UI.act = function (a, d, node) {
       for (const k in S.res) S.res[k] = res0[k] || 0;
       if (a === 'buildmax') { col.b[d.b] = lv0; if (ban0) col.ban = ban0; } else S.ship.up[d.id] = lv0; G.dirty = true;
       if (!n) { quiet = true; break; }
-      node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = '+' + n + ' levels for ' + spent.join(', ') + '. Click again';
+      node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = '+' + n + ' levels for ' + spent.join(', ') + (G.touch ? '. Tap again' : '. Click again');
       node.classList.add('confirm'); return;
     }
     if (a === 'upgmax') { let n = 0; while (n < 100 && G.buyUpg(d.id)) n++; if (n) { say(G.UPG[d.id].n + ' +' + n + '.'); if (d.id === 'scanner') G.reveal(G.here()); } break; }
@@ -671,14 +696,14 @@ UI.act = function (a, d, node) {
     case 'perk': G.buyPerk(d.id); break;
     case 'ascend': case 'newuni': {
       const nu = a === 'newuni';
-      if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = nu ? 'Really leave this universe? Click again.' : 'Everything resets. Click again to confirm.'; return; }
+      if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = nu ? (G.touch ? 'Really leave this universe? Tap again.' : 'Really leave this universe? Click again.') : (G.touch ? 'Everything resets. Tap again to confirm.' : 'Everything resets. Click again to confirm.'); return; }
       const gain = G.ascend(nu); UI.close(); UI.info(nu ? 'Universe #' + G.S.uni.n : 'Ascended', '<p class="etext">' + (nu ? 'You step through. The constants are different here.' + (G.S.uni.mods.length ? ' This universe is ' + G.S.uni.mods.map(m => '<b>' + G.UMOD[m].n + '</b> (' + G.UMOD[m].d + ')').join(', ') + '.' : '') : 'One rusty ship. Again. But you remember.') + '</p><ul class="gains"><li>+' + fmt(gain) + ' ascension points</li></ul>'); return;
     }
     case 'set': S.set[d.k] = !S.set[d.k]; if (G.audioApply) G.audioApply(); break;
     case 'save': G.save(); say('Saved.'); break;
     case 'export': UI.refresh(); UI.hold = Date.now() + 120000; $('savebox').value = G.exportSave(); $('savebox').select(); return;
     case 'import': { const v = $('savebox').value; if (v && G.importSave(v)) { G.arrive(G.here(), false); UI.close(); UI.toast('Save imported.', 'good'); } else { say('That is not a valid save.'); UI.refresh(); } return; }
-    case 'wipe': if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = 'Really erase everything? Click again.'; return; } localStorage.removeItem(G.SAVE_KEY); location.reload(); return;
+    case 'wipe': if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = G.touch ? 'Really erase everything? Tap again.' : 'Really erase everything? Click again.'; return; } localStorage.removeItem(G.SAVE_KEY); location.reload(); return;
     case 'evc': { const dl = UI.dlg; dl.res = G.resolveEvent(dl.ev, +d.i, dl.ctx); UI.renderDlg(); if (G.sfx) G.sfx('click'); return; }
     case 'evok': {
       const dl = UI.dlg; UI.dlg = null; UI.renderDlg();
@@ -723,7 +748,7 @@ PANELS.guide = function () {
     h += sec('Resource shapes', '<p>The colour tells you which resource; the shape tells you how rare it is.</p><div class="legend">' + ['common', 'uncommon', 'rare', 'legendary', 'refined', 'advanced', 'exotic'].map(t => { const id = G.RES_ORDER.find(r => G.RES[r].t === t); return '<span>' + ri(id) + G.TIER_NAME[t] + '</span>'; }).join('') + '</div><p class="dim">Every cost in the game names the resource next to the number. Red means you do not have enough banked.</p>');
     h += sec('Controls', kv(T ? 'Left stick' : '<kbd>W A S D</kbd> / arrows / click', 'Fly') + kv(k('Space', 'MINE') + ' hold', 'Mine the nearest rock') + kv(k('E', 'tap the prompt'), 'Orbit, dock, investigate') + kv(k('Shift', 'BOOST') + ' hold', 'Afterburner, burns energy') + kv(k('Q', 'NOVA'), 'Area blast: 25 energy, 18s cooldown') + kv(T ? 'Pinch' : 'Mouse wheel', 'Zoom') + kv(T ? 'Tap a hostile' : 'Click a hostile', 'Focus fire on it') + (T ? kv('<kbd>MENU</kbd>', 'All panels') : kv('<kbd>M</kbd> <kbd>2</kbd>–<kbd>0</kbd> <kbd>H</kbd>', 'Map, panels, this guide')));
   } else if (tab === 'colony') {
-    h += sec('What a colony needs', '<p><b>Slots</b>: each kind of building takes one slot; levels are unlimited. Bigger planets and moons mean more slots. Changed your mind? <b>Demolish</b> a building to free its slot and get half of what you spent on it back, or <b>Pause</b> it to stop it using energy, workers and inputs.</p><p><b>Converters</b> (Smelter, Fabricator, Refinery…) turn one resource into another. They never empty a stock: they keep a reserve (1 minute of income by default; change it at the top of the Colonies screen). If a resource is falling, the Colonies screen lists which converters are eating it.</p><p><b>AI Governor</b> (optional, per colony): fixes energy first, then housing, then extraction and research, and only adds converters when the inputs have spare supply. It never rebuilds something you demolished.</p><p><b>Workers</b>: every building level needs 1M population. If "Workforce" is under 100%, build Habitats (or wait: population grows toward its housing cap, faster on habitable worlds).</p><p><b>Energy</b>: most buildings draw energy; Solar Farms make it. If the empire-wide energy store hits zero, everything slows. The warning appears top-centre.</p><p><b>Richness</b>: the stars beside each resource. A Mine on a ★★★★ iron world makes four times what it does on ★.</p>');
+    h += sec('What a colony needs', '<p><b>Slots</b>: each kind of building takes one slot; levels are unlimited. Bigger planets and moons mean more slots. Changed your mind? <b>Demolish</b> a building to free its slot and get half of what you spent on it back, or <b>Pause</b> it to stop it using energy, workers and inputs.</p><p><b>Converters</b> (Smelter, Fabricator, Refinery…) turn one resource into another. They never empty a stock: they keep a reserve (1 minute of income by default; change it at the top of the Colonies screen). If a resource is falling, the Colonies screen lists which converters are eating it.</p><p><b>AI Governor</b> (optional, per colony): fixes energy first, then housing, then extraction and research, and only adds converters when the inputs have spare supply. It never rebuilds something you demolished.</p><p><b>Workers</b>: every building level needs 1M population. If "Workforce" is under 100%, build Habitats (or wait: population grows toward its housing cap, faster on habitable worlds).</p><p><b>Energy</b>: most buildings draw energy; Solar Farms make it. If the empire-wide energy store hits zero, everything slows. The warning appears top-centre.</p><p><b>Travelling</b>: to reach a far system (one of your colonies, say), press <b>Set course</b> in the Colonies screen or <b>Set as destination</b> on the galaxy map. The route appears on the map and under your location; ' + (T ? 'tap it' : 'press ' + k('J', '') + ' or click it') + ' to jump to the next stop.</p><p><b>Richness</b>: the stars beside each resource. A Mine on a ★★★★ iron world makes four times what it does on ★.</p>');
     h += sec('Which worlds to settle', '<p>Distance from home does not matter: a far colony costs and produces the same as a near one. What matters is the planet. Each colony makes the next pod 10% dearer and draws a little more raider attention, so a colony with no buildings is a cost. Pick worlds with resources you need, good habitability and plenty of slots, and build on them. The planet screen sums this up under "Is it worth it?".</p><p>A colony you regret can be abandoned from its screen: you get back half a pod and the next pod gets cheaper again.</p>');
     h += sec('Production chains', '<p>Raw ore is turned into better materials by Industry buildings, and those feed the next tier:</p><p class="chain">Iron → Steel → Advanced Alloy → Nanomaterial → Quantum Material</p><p class="chain">Hydrogen → Fusion Fuel → Antimatter → Exotic Energy</p><p class="chain">Crystal → Refined Crystal → Quantum Crystal → Neural Crystal</p><p>A converter only runs if its inputs are in stock. If a number on the top bar is red and negative, something is eating that resource faster than you make it: build more of whatever produces it.</p>');
     h += sec('Automation', '<p>Research in the Industry branch removes the chores: <b>Mining Drones</b> mine beside you, <b>Mining Rigs</b> (Megastructures panel) farm a belt forever, <b>Quantum Uplink</b> banks cargo instantly, <b>AI Governors</b> build colonies for you, and <b>Von Neumann Probes</b> found new ones.</p><p>Colonies keep producing while the game is closed, at reduced efficiency, for up to 12 hours.</p>');

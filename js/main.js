@@ -66,7 +66,7 @@
       else if (k === 'h' || k === '?') UI.toggle('guide');
       else if (P[k]) UI.toggle(P[k]);
       else if (k === 'Escape') { if (UI.panel || G.map.open) UI.close(); else UI.open('settings'); }
-      else if (!UI.modalOpen()) { if (k === 'e') UI.interact(); else if (k === 'q') F.ability(); }
+      else if (!UI.modalOpen()) { if (k === 'e') UI.interact(); else if (k === 'q') F.ability(); else if (k === 'j') { const n = G.nextHop(); if (!n) UI.toast(G.S.dest ? 'No charted route to your destination' : 'No destination set: pick one on the galaxy map (M)'); else { const why = G.canJump(G.sysById(n)); if (why) UI.toast(why, 'bad'); else G.jump(n); } } }
     });
     window.addEventListener('keyup', e => { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys[k] = false; });
     window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
