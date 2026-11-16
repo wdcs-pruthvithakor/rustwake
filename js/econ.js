@@ -324,6 +324,19 @@ G.colonyCalc = function (col) {
   out.def = (out.def + sb.def) * out.defMul;
   return out;
 };
+/* The danger level your ship is built for: where a normal enemy wave is a fair fight for your ship alone.
+   Enemies grow 16% per danger level in both toughness and damage, so this compares sqrt(firepower × toughness). */
+G.shipRating = function () {
+  const st = G.shipStats(), ws = G.S.ship.weapons; let f = 0;
+  for (let i = 0; i < st.slots; i++) { const w = G.WEAPONS[ws[i]]; if (w && w.type !== 'pd') f += w.f; }
+  const power = Math.sqrt(st.dmg * Math.max(1, f) * (st.hull + st.shield * 0.5));
+  return Math.max(1, Math.round(1 + Math.log(power / 17.2) / Math.log(1.16)));
+};
+/* How a danger level feels for your ship: [word, css class]. */
+G.dangerFor = function (L) {
+  const d = L - G.shipRating();
+  return d <= -5 ? ['easy', 'good'] : d <= 0 ? ['fair', 'good'] : d <= 4 ? ['hard', 'warn'] : d <= 8 ? ['very hard', 'bad'] : ['deadly', 'bad'];
+};
 G.rigCost = function (sid) { const n = G.S.sd[sid] && G.S.sd[sid].rigs || 0; return G.scaleCost({ steel: 100, circuits: 40 }, Math.pow(1.7, n) * G.mult('cost')); };
 // Each rig works every belt in its system: 1.5/s per common resource on a belt of richness 1, before research bonuses.
 G.rigRates = function (sid, n) {

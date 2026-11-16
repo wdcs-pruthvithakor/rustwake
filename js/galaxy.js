@@ -132,7 +132,7 @@ MP.draw = function () {
     const px = X(sig.x), py = Y(sig.y), q = (t * 0.7) % 1;
     ctx.strokeStyle = 'rgba(255,255,255,' + (1 - q) + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(px, py, 6 + q * 26, 0, TAU); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.save(); ctx.translate(px, py); ctx.rotate(Math.PI / 4); ctx.fillRect(-4, -4, 8, 8); ctx.restore();
-    ctx.font = '500 11px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('SIGNAL', px, py - 16);
+    ctx.font = '500 11px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText(G.S.story.signal >= 5 ? 'THE HERALD' : 'SIGNAL', px, py - 16);
     if (px < 0 || py < 0 || px > W || py > H) { const a = Math.atan2(py - H / 2, px - W / 2); ctx.save(); ctx.translate(W / 2 + Math.cos(a) * (W / 2 - 60), H / 2 + Math.sin(a) * (H / 2 - 60)); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, 9); ctx.lineTo(-8, -9); ctx.fill(); ctx.restore(); }
   }
   // planned route

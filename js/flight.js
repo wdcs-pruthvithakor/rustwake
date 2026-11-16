@@ -32,6 +32,26 @@ function makeEnemy(id, x, y, level, elite) {
   if (!G.S.codex.enemy[id] && !d.isDrone) G.S.codex.enemy[id] = 1;
   return e;
 }
+/* The Silence is measured against your ship, not a danger level: danger numbers do not say how strong you are.
+   An Absence takes about 90 s of your sustained fire (before armor and your fleet) and about 25 s of
+   continuous hits to kill you from full; each A Quiet dies in about 5 seconds and needs 2 minutes alone. */
+G.silenceFit = function () {
+  const st = G.shipStats(), ws = G.S.ship.weapons; let f = 0;
+  for (let i = 0; i < st.slots; i++) { const w = G.WEAPONS[ws[i]]; if (w && w.type !== 'pd') f += w.f; }
+  const base = st.dmg * Math.max(1, f), dps = base * 0.34 * (1 + (G.M.vsSilence || 0)), tough = st.hull + st.shield * 0.5;
+  return { dps, base, tough };
+};
+function silenceFit(e) {
+  // The Herald (the Silence's tripwire) is not a Silence ship: your full damage counts against it
+  const m = G.silenceFit(), boss = !!e.def.boss, life = (e.id === 'herald' ? 75 * m.base : (boss ? 90 : 5) * m.dps), kill = e.id === 'herald' ? 30 : boss ? 25 : 120;
+  e.maxHp = e.hp = life * 2 / 3; e.maxSh = e.sh = life / 3;
+  e.dmg = m.tough / kill * e.rate;
+}
+F.spawnHerald = function () {
+  if (F.ents.some(e => e.id === 'herald')) return;
+  const s = F.ship, a = G.rand.range(0, G.TAU), e = makeEnemy('herald', s.x + Math.cos(a) * 750, s.y + Math.sin(a) * 750, G.silenceLevel(), 1);
+  silenceFit(e); F.ents.push(e);
+};
 F.spawnWave = function (fac, level, budget, boss, cx, cy, spread) {
   const f = G.FACTIONS[fac] || G.FACTIONS.pirate;
   if (fac === 'silence') {
@@ -52,6 +72,7 @@ F.spawnWave = function (fac, level, budget, boss, cx, cy, spread) {
   const elite = budget > 3 ? 1 + budget / (list.length * 3 + 1) : 1; // leftover threat makes the wave tougher instead of bigger
   for (const id of list) {
     const e = makeEnemy(id, ox + G.rand.range(-1, 1) * (spread || 160), oy + G.rand.range(-1, 1) * (spread || 160), level, elite);
+    if (fac === 'silence') silenceFit(e);
     F.ents.push(e);
   }
   return list.length;
@@ -135,11 +156,13 @@ F.enter = function (sys, jumped) {
   }
   if (sd.mega && sd.mega.stargate) F.objs.push({ type: 'stargate', name: 'Stargate', x: -ox * 0.8, y: -oy * 0.8, r: 60, t: 0 });
   const st = G.signalTarget();
-  if (st && st.id === sys.id) F.objs.push({ type: 'signal', name: 'Signal Source', x: -ox, y: -oy, r: 30, t: 0 });
+  if (st && st.id === sys.id) { if (S.story.signal >= 5) F.spawnHerald(); else F.objs.push({ type: 'signal', name: 'Signal Source', x: -ox, y: -oy, r: 30, t: 0 }); }
   if (hostileCiv && !sys.capital) F.spawnWave('empire', sys.level, 4 + sys.level * 0.1, false, ox, oy, 300);
   if (S.silence.on) {
     const org = G.silenceOrigin();
-    if (org && org.id === sys.id) { F.bossSpawned = false; F.spawnWave('silence', G.silenceLevel(sys), 14, true, 0, sys.star.r + 500, 300); F.bossSpawned = true; }
+    if (org && org.id === sys.id) { F.bossSpawned = false; F.spawnWave('silence', G.silenceLevel(sys), 14, true, 0, sys.star.r + 500, 300); F.bossSpawned = true;
+      // it never heals: damage you did before retreating or dying is still there
+      const b = F.ents.find(e => e.id === 'eraser'), f = S.silence.bossHp; if (b && f && f < 1) { b.hp = b.maxHp * f; G.log('An Absence still carries your damage: ' + Math.round(f * 100) + '% hull left.', 'epic'); } }
     else if (erased) F.spawnWave('silence', G.silenceLevel(sys), 10, false);
   }
   // where the ship appears
@@ -184,7 +207,10 @@ function hit(t, dmg, type, team) {
   if (P && (F.inv > 0 || F.dead)) return;
   if (!P && t.def.fac === 'silence' && team === 0) dmg *= 0.34 * (1 + (G.M.vsSilence || 0));
   let sh = P ? S.ship.sh : t.sh, hp = P ? S.ship.hp : t.hp;
-  if (type !== 'null' && sh > 0) {
+  if (type === 'null' && P && sh > 0) { // your shields stop half of a Silence beam; the rest goes straight through
+    const half = dmg * 0.5; if (sh >= half) { sh -= half; dmg -= half; } else { dmg -= sh; sh = 0; }
+    t.shFlash = 0.25;
+  } else if (type !== 'null' && sh > 0) {
     const m = type === 'laser' ? 1.5 : type === 'plasma' ? 0.6 : 1, d = dmg * m;
     if (sh >= d) { sh -= d; dmg = 0; } else { dmg -= sh / m; sh = 0; }
     t.shFlash = 0.25;
@@ -200,7 +226,7 @@ function hit(t, dmg, type, team) {
   }
   t.lastHit = F.time;
   if (P) { S.ship.sh = sh; S.ship.hp = hp; F.lastHit = F.time; if (hp <= 0) playerDie(); else if (G.S.set.shake) F.cam.shake = Math.min(10, F.cam.shake + 2); }
-  else { t.sh = sh; t.hp = hp; t.sleep = false; if (hp <= 0) kill(t); }
+  else { t.sh = sh; t.hp = hp; t.sleep = false; if (t.id === 'eraser' && S.silence.on) S.silence.bossHp = Math.max(0.02, hp / t.maxHp); if (hp <= 0) kill(t); }
 }
 function kill(e) {
   if (e.dead) return; e.dead = true;
@@ -209,6 +235,7 @@ function kill(e) {
   explode(e.x, e.y, e.r, d.col || '#9fd0ff');
   if (e.team === 0) {
     if (e.fleetId) {
+      if (F.erased) { G.log(G.FLEET[e.fleetId].n + ' disabled. It drifts out of the fight and rejoins you at your next jump.', 'bad'); return; } // the Silence erases, it does not salvage
       const lost = Math.min(S.fleet[e.fleetId] || 0, Math.max(1, Math.round(e.rep * 0.6)));
       S.fleet[e.fleetId] -= lost; S.stats.fleetLost += lost;
       G.log('Lost ' + lost + ' ' + G.FLEET[e.fleetId].n + (lost > 1 ? 's' : '') + '.', 'bad');
@@ -230,6 +257,7 @@ function kill(e) {
     F.pods.push({ x: e.x, y: e.y, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, res, amt, life: 40 });
   }
   if (d.split && !e.child) for (let i = 0; i < 2; i++) { const c = makeEnemy(e.id, e.x + G.rand.range(-30, 30), e.y + G.rand.range(-30, 30), L, 0.45); c.child = true; c.r *= 0.7; F.ents.push(c); }
+  if (e.id === 'herald' && !S.story.herald) { S.story.herald = true; G.log('The Herald is dead. Far away, something turns toward you.', 'epic'); G.wakeSilence(); }
   if (d.boss) {
     S.stats.bossKills++;
     G.log(d.n + ' destroyed.', 'epic');
@@ -260,7 +288,12 @@ function playerDie() {
 }
 function respawn() {
   const S = G.S; let target = '0,0';
-  if (G.isErased(0, 0)) { const ids = Object.keys(S.colonies); if (ids.length) target = S.colonies[ids[0]].sys; }
+  if (G.isErased(0, 0)) {
+    // never wake up inside the Silence: a colony if one is left, else the nearest star outside it
+    const ids = Object.keys(S.colonies);
+    if (ids.length) target = S.colonies[ids[0]].sys;
+    else { const si = S.silence; for (let r = Math.ceil(si.r); r < si.r + 40 && target === '0,0'; r++) { const a = Math.atan2(-si.cy, -si.cx); const s = G.nearestSystem(Math.round(si.cx + Math.cos(a) * (r + 1)), Math.round(si.cy + Math.sin(a) * (r + 1))); if (s && !G.isErased(s.cx, s.cy)) target = s.id; } }
+  }
   const st = G.shipStats(); S.ship.hp = st.hull * 0.5; S.ship.sh = 0; S.ship.en = st.energy * 0.5;
   S.loc = target; F.dead = 0;
   G.arrive(G.sysById(target), false);
@@ -345,6 +378,7 @@ F.update = function (dt) {
   if (F.time - F.lastHit > 3.5) S.ship.sh = Math.min(st.shield, S.ship.sh + st.shield * 0.12 * dt);
   if (S.ship.hp > st.hull) S.ship.hp = st.hull;
   if (F.safe && F.time - F.lastHit > 6 && !F.hostileCount()) S.ship.hp = Math.min(st.hull, S.ship.hp + st.hull * 0.02 * dt);
+  else if (F.time - F.lastHit > 10 && !F.hostileCount()) S.ship.hp = Math.min(st.hull, S.ship.hp + st.hull * 0.005 * dt); // field repairs: slow, but never stranded
 
   // ---- scanning planets
   const sd = G.sd(sys.id); let near = null, nd = 1e9;
@@ -480,7 +514,7 @@ F.update = function (dt) {
   const hc = F.hostileCount();
   if (!F.safe) {
     const cleared = sd.cleared ? 0.35 : 1;
-    F.heat += dt * (0.8 + (mining ? 0.9 : 0)) * (1 + sys.level * 0.01) * G.mult('heat') * cleared * (hc ? 0.35 : 1) * (F.erased ? 4 : 1);
+    F.heat += dt * (0.8 + (mining ? 0.9 : 0)) * (1 + sys.level * 0.01) * G.mult('heat') * cleared * (hc ? 0.35 : 1) * (F.erased ? (G.silenceOrigin() && G.silenceOrigin().id === sys.id ? 1 : 4) : 1);
     if (F.heat >= 100) {
       F.heat = 0; F.wave++;
       const fac = F.erased ? 'silence' : sys.civ && G.civHostile(sys.civ) ? 'empire' : sys.faction;

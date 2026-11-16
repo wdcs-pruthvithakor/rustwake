@@ -227,7 +227,8 @@ G.ENEMY = {
   wraith: { n: 'Phase Wraith', fac: 'dim', th: 4, hp: 110, sh: 0, arm: 0, dmg: 16, w: 'plasma', range: 360, rate: 0.8, spd: 1.2, r: 15, fast: 1, blink: 1, shape: 70, col: '#ff5cf0' },
   maw: { n: 'Rift Maw', fac: 'dim', th: 30, hp: 5200, sh: 800, arm: 0.3, dmg: 50, w: 'bite', range: 70, rate: 0.5, spd: 0.95, r: 60, large: 1, boss: 1, blink: 1, shape: 71, col: '#ff3cc0' },
   nullship: { n: 'A Quiet', fac: 'silence', th: 5, hp: 260, sh: 260, arm: 0.4, dmg: 13, w: 'null', range: 440, rate: 0.9, spd: 1, r: 16, shape: 80, col: '#e8e8ff' },
-  eraser: { n: 'An Absence', fac: 'silence', th: 40, hp: 9000, sh: 5000, arm: 0.6, dmg: 40, w: 'null', range: 560, rate: 0.6, spd: 0.5, r: 64, large: 1, boss: 1, shape: 81, col: '#ffffff' }
+  herald: { n: 'The Herald', fac: 'herald', th: 30, hp: 5000, sh: 3000, arm: 0.4, dmg: 30, w: 'null', range: 520, rate: 0.7, spd: 0.6, r: 56, large: 1, boss: 1, shape: 81, col: '#d8d8ff' },
+  eraser: { n: 'An Absence', fac: 'silence', th: 40, hp: 6000, sh: 3000, arm: 0.45, dmg: 30, w: 'null', range: 560, rate: 0.6, spd: 0.5, r: 64, large: 1, boss: 1, shape: 81, col: '#ffffff' }
 };
 for (const k in G.ENEMY) G.ENEMY[k].id = k;
 G.FACTIONS = {
@@ -364,7 +365,7 @@ G.MEGA = {
   planeteng: { n: 'Planet Engine', req: 'm_planeteng', scope: 'sys', d: 'Move the worlds where you want them: every planet here becomes 100% habitable with +3 slots.', stages: [{ n: 'Planet Engine', cost: { qmatter: 8000, antimatter: 5000 } }] },
   starlifter: { n: 'Star Lifter', req: 'm_starlifter', scope: 'sys', d: 'Mines the star itself. A river of common and uncommon material.', stages: [{ n: 'Star Lifter', cost: { qmatter: 20000, exotic: 3000 } }] },
   artstar: { n: 'Artificial Star', req: 'm_artstar', scope: 'sys', d: 'A sun you designed. +100% research everywhere.', stages: [{ n: 'Artificial Star', cost: { singularity: 20, exotic: 20000, stellarheart: 5 } }] },
-  anchor: { n: 'Reality Anchor', req: 'm_anchor', scope: 'sys', d: 'Systems within 8 cells cannot be erased by the Silence.', stages: [{ n: 'Reality Anchor', cost: { qmatter: 10000, ancientmatter: 5, chronocrystal: 3 } }] },
+  anchor: { n: 'Reality Anchor', req: 'm_anchor', scope: 'sys', d: 'Systems within 8 cells cannot be erased by the Silence.', stages: [{ n: 'Reality Anchor', cost: { steel: 4000, circuits: 2000, crystal: 3000 } }] },
   nexus: { n: 'Galactic Nexus', req: 'm_nexus', scope: 'uni', d: 'Binds every system you hold into one machine. +200% to all production.', stages: [{ n: 'Lattice', cost: { singularity: 100, qmatter: 300000 } }, { n: 'Binding', cost: { singularity: 300, ancientmatter: 20, exotic: 300000 } }, { n: 'Galactic Nexus', cost: { singularity: 800, qmatter: 3e6, chronocrystal: 20 } }] },
   aperture: { n: 'The Aperture', req: 'm_aperture', scope: 'uni', d: 'Something that has never existed before. It opens outward.', stages: [{ n: 'Frame', cost: { singularity: 1000, qmatter: 5e6 } }, { n: 'Lens', cost: { singularity: 2500, paradox: 5, chronocrystal: 30 } }, { n: 'The Aperture', cost: { singularity: 6000, paradox: 12, stellarheart: 30, ancientmatter: 30 } }] }
 };

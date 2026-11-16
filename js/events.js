@@ -232,8 +232,9 @@ G.EVENTS = [
   E('signal3', 'The Signal — Source Four', ['signal3'], 'A planet-sized machine, its purpose obvious even across the gulf of species: it is an anchor. It was built to hold something still. It failed, and half of it is simply missing, edges smooth as glass.', [
     C('Study the half that remains', [{ w: 1, t: 'You do not yet understand it. You will. The last point is marked.', f: X => { X.signal(); X.sci(4000); X.legend(); } }])
   ], { once: true }),
-  E('signal4', 'The Signal — The End Of It', ['signal4'], 'There is nothing here. No buoy, no wreck. Your charts show a star at these coordinates. Your eyes show none. Then your charts stop showing it too, and you find you are no longer sure there ever was one. The signal was not a call for help. It was a warning, and by following it, with your engines and your bright colonies, you have been very, very loud.', [
-    C('Go home. Quickly.', [{ w: 1, t: 'Behind you, another star goes out.', f: X => { X.signal(); X.sci(20000); } }])
+  E('signal4', 'The Signal — The End Of It', ['signal4'], 'There is nothing here. No buoy, no wreck. Your charts show a star at these coordinates. Your eyes show none. Then your charts stop showing it too, and you find you are no longer sure there ever was one. The signal was not a call for help. It was a warning, and by following it, with your engines and your bright colonies, you have been very, very loud. Something here has noticed. It is a herald: kill it and what sent it will know exactly where you are.', [
+    C('Face it', [{ w: 1, t: 'The Herald unfolds out of nothing. Destroy it and the Silence wakes. Leave, and it waits here for as long as you need.', f: X => { X.signal(); X.sci(20000); X.herald(); } }]),
+    C('Not yet. Leave.', [{ w: 1, t: 'You back away. It does not follow. The map marks where it waits, for when you are ready.', f: X => { X.signal(); X.sci(20000); } }])
   ], { once: true })
 ];
 G.EVENT = {};

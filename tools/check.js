@@ -57,7 +57,9 @@ for (const r in G.RES) S.res[r] = 1e12;
 for (const id in G.MEGA) { let n = 0; while (!G.canBuildMega(S.loc, id) && n++ < 10) ok(G.buildMega(S.loc, id), 'mega ' + id); }
 ok(G.megaStage(S.loc, 'dyson') === 7 && G.canNewUniverse(), 'megastructures complete');
 ok(S.silence.on || true, 'silence state');
-G.slowTick(1); ok(S.silence.on, 'dyson wakes the Silence');
+G.slowTick(1); ok(!S.silence.on, 'dyson no longer wakes the Silence');
+S.story.signal = 5; ok(G.signalTarget() !== null, 'the Herald waits at the last signal point');
+G.wakeSilence(); S.story.herald = true; ok(S.silence.on && G.signalTarget() === null, 'Herald dead: Silence awake, marker gone');
 // fleet + combat
 for (const id in G.FLEET) ok(G.buyShip(id, 1) || G.fleetUsed() + G.FLEET[id].cp > G.fleetCap(), 'buy ' + id);
 const F = G.flight; let target = G.systemsNear(G.here().x, G.here().y, 2000).find(s => s.special === 'pirate');

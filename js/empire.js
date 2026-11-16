@@ -308,7 +308,8 @@ G.wakeSilence = function () {
 };
 G.silenceTick = function (dt) { // once a second
   const S = G.S, si = S.silence; if (!si.on) return;
-  si.r += dt / 210 * (1 + 0.15 * (S.uni.n - 1));
+  // a system every ~10 minutes, and it rests while you have no colony outside it: it hunts colonies, not you
+  if (Object.keys(S.colonies).length) si.r += dt / G.SILENCE_SEC * (1 + 0.15 * (S.uni.n - 1));
   { const o = G.silenceOrigin(); if (o && !S.known[o.id]) S.known[o.id] = 1; } // its centre is always on the map
   const warned = si.warned || (si.warned = {});
   for (const pid in S.colonies) {
@@ -324,17 +325,25 @@ G.silenceTick = function (dt) { // once a second
   }
 };
 /* Seconds until the Silence's edge reaches this system (Infinity if anchored, off, or never). */
+G.SILENCE_SEC = 600;
 G.silenceETA = function (sid) {
   const si = G.S.silence; if (!si.on) return Infinity;
   const c = G.parseId(sid); if (G.anchored(c[0], c[1])) return Infinity;
   const d = Math.hypot(c[0] - si.cx, c[1] - si.cy) - si.r; if (d <= 0) return 0;
-  return d * 210 / (1 + 0.15 * (G.S.uni.n - 1));
+  if (!Object.keys(G.S.colonies).length) return Infinity;
+  return d * G.SILENCE_SEC / (1 + 0.15 * (G.S.uni.n - 1));
 };
 G.silenceNext = function () { let best = Infinity, pid = null; for (const k in G.S.colonies) { const e = G.silenceETA(G.S.colonies[k].sys); if (e < best) { best = e; pid = k; } } return { eta: best, pid }; };
 /* Silence ships fight at the deepest danger level where you have destroyed an enemy (at least 10), wherever
    they are: the systems around its centre can be far deeper than anywhere you have fought, and wormholes can
    drop you deeper than you belong. Older saves without that record use their deepest visit, capped at 30. */
 G.silenceLevel = function () { const st = G.S.stats; return Math.max(10, st.maxKill || Math.min(30, st.maxLevel || 1)); };
+/* What "ready for the Silence" means: the research to fight it, and the research rate to get it in time. */
+G.heraldReady = function () {
+  const S = G.S, need = ['sci9', 'trn1', 'trn2'].filter(id => !S.tech[id]), cost = need.reduce((a, id) => a + G.techCost(id), 0), rate = G.rates && G.rates.sci || 0;
+  if (!need.length) return 'you have the research to fight it.';
+  return 'after it wakes you will need ' + G.fmt(cost) + ' research (Null Weaponry' + (need.length > 1 ? ' and what leads to it' : '') + ')' + (rate > 0 ? ', about ' + G.fmtT(cost / rate) + ' at your current rate' : '') + ', while it eats a system every few minutes. Build up research first.';
+};
 G.silenceOrigin = function () { const si = G.S.silence; return G.nearestSystem(si.cx, si.cy); };
 G.defeatSilence = function () {
   const S = G.S; S.silence.on = false; S.silence.defeated = true; S.silence.r = 0;
@@ -348,7 +357,9 @@ G.defeatSilence = function () {
 /* ---------- story: the signal ---------- */
 const SIGNAL_DIST = [3, 6, 10, 15, 21];
 G.signalTarget = function () {
-  const S = G.S, k = S.story.signal; if (k >= SIGNAL_DIST.length || !S.ship.ftl) return null;
+  const S = G.S; let k = S.story.signal;
+  if (k >= SIGNAL_DIST.length) { if (S.story.herald || S.silence.on || S.silence.defeated || !S.ship.ftl) return null; k = SIGNAL_DIST.length - 1; } // the Herald waits at the last point
+  if (!S.ship.ftl) return null;
   const rng = G.RNG(G.hash(S.seed, S.uni.n, 4040, k)), a = rng.range(0, G.TAU);
   return G.nearestSystem(Math.round(Math.cos(a) * SIGNAL_DIST[k]), Math.round(Math.sin(a) * SIGNAL_DIST[k]));
 };
@@ -391,7 +402,8 @@ G.resolveEvent = function (ev, ci, ctx) {
     pop(f) { if (ctx.col) { ctx.col.pop *= 1 + f; lines.push('Population ' + (f > 0 ? '+' : '') + Math.round(f * 100) + '%'); } },
     xp(n) { G.compXP(n * (1 + L)); lines.push('Companions gain experience'); },
     upg(id) { S.ship.up[id]++; G.dirty = true; lines.push(G.UPG[id].n + ' improved for free'); },
-    signal() { S.story.signal++; if (S.story.signal >= SIGNAL_DIST.length) G.wakeSilence(); },
+    signal() { S.story.signal++; },
+    herald() { ctx.herald = true; },
     flag(k) { S.story[k] = true; },
     wormhole() { ctx.wormhole = true; lines.push('The ship is pulled through'); }
   };
@@ -433,7 +445,7 @@ G.MISSIONS = [
   { t: 'Big game', d: 'Kill a boss. Lairs are marked with a skull on the survey map.', c: () => G.S.stats.bossKills >= 1, r: { credits: 20000 } },
   { t: 'Ten worlds', d: 'Hold ten colonies. AI Governors help.', c: () => G.colonyCount() >= 10, p: () => G.colonyCount() + '/10', r: { alloy: 500 } },
   { t: 'Build upward', d: 'Build an Orbital Station.', c: () => megaAny('station'), r: { nano: 100 } },
-  { t: 'The source', d: 'Follow the signal to its end.', c: () => G.S.story.signal >= 5, p: () => G.S.story.signal + '/5', r: { sci: 200000 } },
+  { t: 'The source', d: () => 'Follow the signal to its end. The Herald waits there; killing it wakes the Silence. Be ready: ' + G.heraldReady(),  c: () => G.S.story.signal >= 5, p: () => G.S.story.signal + '/5', r: { sci: 200000 } },
   { t: 'Cage a star', d: 'Begin a Dyson structure.', c: () => megaAny('dyson'), r: { qcrystal: 2000 } },
   { t: 'God Complex', d: 'Complete a Dyson Sphere (stage five).', c: () => megaAny('dyson', 5), r: { exotic: 2000 } },
   { t: 'Hold it still', d: 'Research Reality Anchors and build one before the Silence reaches something you love.', c: () => megaAny('anchor'), r: { qmatter: 5000 } },
@@ -577,7 +589,6 @@ G.slowTick = function (dt) {
   if ((T.gov || 0) <= S.t) { T.gov = S.t + 4; G.governorTick(); }
   if ((T.probe || 0) <= S.t) { T.probe = S.t + 45; G.probeTick(); }
   if ((T.colev || 0) <= S.t) { T.colev = S.t + 240 + G.rand.range(0, 240); if (G.colonyCount() && S.t > 300) { const ids = Object.keys(S.colonies), col = S.colonies[G.rand.pick(ids)], sys = G.sysById(col.sys); const ev = G.pickEvent('colony', sys.level); if (ev) G.queueEvent(ev, { level: sys.level, col, planet: G.planetById(col.pid), sys }); } }
-  if (!S.silence.on && !S.silence.defeated && megaAny('dyson', 3)) G.wakeSilence();
 };
 /* AI Governor. Each colony gets one decision at a time, in this order:
    1. fix an energy shortage, 2. house workers, 3. extract what the planet has / research / credits,
