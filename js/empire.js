@@ -27,7 +27,7 @@ G.canJump = function (sys) {
   if (!gate && Math.hypot(sys.x - a.x, sys.y - a.y) > st.jump) return 'Out of jump range';
   if (G.isErased(sys.cx, sys.cy) && !S.tech.trn2) return 'There is nothing there to jump to';
   if (S.ship.en < G.jumpCost(sys)) return 'Not enough energy (' + Math.ceil(G.jumpCost(sys)) + ' needed)';
-  if (G.flight && G.flight.hostileNear(650)) return 'Hostiles too close to spool the drive';
+  if (G.flight && G.flight.hostileNear(650, true)) return 'Hostiles too close to spool the drive';
   return null;
 };
 /* Route planning: fewest jumps to a charted system, through charted systems only. */
@@ -80,6 +80,12 @@ G.arrive = function (sys, jumped) {
   if (sys.civ) G.meet(sys.civ);
   if (S.dest === sys.id) { S.dest = null; G.log('Arrived at your destination, ' + sys.name + '.', 'good'); }
   if (G.flight) G.flight.enter(sys, jumped);
+  // erased space is empty: point the way to the one system that matters
+  if (S.silence.on && G.isErased(sys.cx, sys.cy)) {
+    const org = G.silenceOrigin();
+    if (org && org.id === sys.id) G.log('An Absence is here, at the centre of the Silence. Follow the yellow arrow at the screen edge.', 'epic');
+    else if (org) { if (!S.dest && G.route(org.id)) S.dest = org.id; G.log('Erased space: nothing here but its ships, and they keep coming. Its centre, and the boss, is ' + org.name + (G.route(org.id) ? ' (' + G.route(org.id).length + ' jumps). Course set.' : '. Open the map to find a way in.'), 'bad'); }
+  }
   if (jumped && G.sfx) G.sfx('jump');
   // arrival events
   if (jumped && first && !sys.home && G.rand.chance(0.14 * Math.min(3, G.mult('anomaly')))) { const ev = G.pickEvent('jump', sys.level); if (ev) G.queueEvent(ev, { level: sys.level, sys }); }
@@ -238,6 +244,14 @@ G.civTick = function () { // every ~15s
 };
 
 /* ---------- raids ---------- */
+/* Strength of a raid on a colony in this system right now (the roll at arrival is ±20%). */
+G.raidPower = function (sid) { const S = G.S; return 30 * Math.pow(1.16, G.sysById(sid).level) * G.notoriety() * G.um('enemy') * (1 + S.stats.raidsWon * 0.03); };
+/* {def, power, need: extra Missile Platform levels to hold every roll, state: 'safe'|'risk'|'weak'} */
+G.raidCheck = function (col, c) {
+  c = c || G.colonyCalc(col); const power = G.raidPower(col.sys), safe = power * 1.2;
+  const per = G.BLD.missileplat.def * c.defMul, need = c.def >= safe ? 0 : Math.ceil((safe - c.def) / per);
+  return { def: c.def, power, need, state: c.def >= safe ? 'safe' : c.def >= power * 0.8 ? 'risk' : 'weak' };
+};
 G.raidTick = function () { // once a second
   const S = G.S, r = S.raid, ids = Object.keys(S.colonies);
   if (!ids.length) { r.next = S.t + 600; return; }
@@ -259,10 +273,11 @@ G.raidTick = function () { // once a second
   if (wars.length && G.rand.chance(0.6)) { fac = 'empire'; who = G.civById(G.rand.pick(wars)).name; }
   else if (S.silence.on && G.rand.chance(0.2)) { fac = 'silence'; who = 'Something quiet'; }
   else if (G.megaCount > 2 && sys.level >= 8 && G.rand.chance(0.3)) { fac = 'ai'; who = 'Rogue machines'; }
-  const power = 30 * Math.pow(1.16, sys.level) * G.notoriety() * G.um('enemy') * (1 + S.stats.raidsWon * 0.03);
+  const power = G.raidPower(col.sys);
   r.pending = { pid, t: S.t + 80, fac, power };
   r.next = S.t + (420 + G.rand.range(0, 320)) / (G.um('raids') * Math.sqrt(G.notoriety()));
-  G.log(who + ' will raid ' + p.name + ' (' + sys.name + ') in 80s. Raid strength ' + G.fmt(power) + ' vs defence ' + G.fmt(G.colonyCalc(col).def) + '.', 'bad');
+  const dd = G.colonyCalc(col).def, odds = dd >= power * 1.2 ? 'Its defences will hold.' : dd >= power * 0.8 ? 'It could go either way.' : 'Its defences will not hold: jump there to fight it yourself, or accept the loss.';
+  G.log(who + ' will raid ' + p.name + ' (' + sys.name + ') in 80s. Raid strength ' + G.fmt(power) + ' vs defence ' + G.fmt(dd) + '. ' + odds, 'bad');
   if (G.sfx) G.sfx('alarm');
 };
 /* A percentage loss that cannot exceed two minutes of that resource's income: painful early, never ruinous late. */
@@ -292,18 +307,38 @@ G.wakeSilence = function () {
 G.silenceTick = function (dt) { // once a second
   const S = G.S, si = S.silence; if (!si.on) return;
   si.r += dt / 210 * (1 + 0.15 * (S.uni.n - 1));
+  { const o = G.silenceOrigin(); if (o && !S.known[o.id]) S.known[o.id] = 1; } // its centre is always on the map
+  const warned = si.warned || (si.warned = {});
   for (const pid in S.colonies) {
     const col = S.colonies[pid], c = G.parseId(col.sys);
     if (G.isErased(c[0], c[1])) {
-      const p = G.planetById(pid); delete S.colonies[pid]; S.stats.erased++; G.sd(col.sys).erased = 1; G.dirty = true;
-      G.log(p.name + ' is gone. Not destroyed. Gone. It is hard to remember there was ever a planet there.', 'bad');
+      // kept, not deleted: it comes back with every building when the Silence is defeated
+      const p = G.planetById(pid); (S.lost = S.lost || {})[pid] = col; delete S.colonies[pid]; S.stats.erased++; G.sd(col.sys).erased = 1; G.dirty = true;
+      G.log(p.name + ' is gone. Not destroyed. Gone. It will return, buildings and all, if you stop the Silence.', 'bad');
+    } else {
+      const eta = G.silenceETA(col.sys);
+      if (eta < 300 && !warned[pid]) { warned[pid] = 1; G.log('The Silence reaches ' + G.planetById(pid).name + ' (' + G.sysById(col.sys).name + ') in about ' + G.fmtT(eta) + '. It will vanish until the Silence is stopped.', 'bad'); if (G.sfx) G.sfx('alarm'); }
     }
   }
 };
+/* Seconds until the Silence's edge reaches this system (Infinity if anchored, off, or never). */
+G.silenceETA = function (sid) {
+  const si = G.S.silence; if (!si.on) return Infinity;
+  const c = G.parseId(sid); if (G.anchored(c[0], c[1])) return Infinity;
+  const d = Math.hypot(c[0] - si.cx, c[1] - si.cy) - si.r; if (d <= 0) return 0;
+  return d * 210 / (1 + 0.15 * (G.S.uni.n - 1));
+};
+G.silenceNext = function () { let best = Infinity, pid = null; for (const k in G.S.colonies) { const e = G.silenceETA(G.S.colonies[k].sys); if (e < best) { best = e; pid = k; } } return { eta: best, pid }; };
+/* Silence ships fight at the deepest danger level where you have destroyed an enemy (at least 10), wherever
+   they are: the systems around its centre can be far deeper than anywhere you have fought, and wormholes can
+   drop you deeper than you belong. Older saves without that record use their deepest visit, capped at 30. */
+G.silenceLevel = function () { const st = G.S.stats; return Math.max(10, st.maxKill || Math.min(30, st.maxLevel || 1)); };
 G.silenceOrigin = function () { const si = G.S.silence; return G.nearestSystem(si.cx, si.cy); };
 G.defeatSilence = function () {
   const S = G.S; S.silence.on = false; S.silence.defeated = true; S.silence.r = 0;
   for (const sid in S.sd) delete S.sd[sid].erased;
+  let back = 0; for (const pid in S.lost || {}) { if (!S.colonies[pid]) { S.colonies[pid] = S.lost[pid]; back++; } } S.lost = {}; S.silence.warned = {};
+  if (back) G.log(back + ' lost ' + (back === 1 ? 'colony is' : 'colonies are') + ' back, with every building.', 'good');
   G.log('The Silence stops. The stars it took are back, and nobody but you remembers they were gone.', 'epic');
   G.giveArtifact(4);
 };

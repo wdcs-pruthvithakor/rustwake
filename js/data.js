@@ -226,8 +226,8 @@ G.ENEMY = {
   obelisk: { n: 'The Obelisk', fac: 'ancient', th: 32, hp: 4200, sh: 3000, arm: 0.6, dmg: 44, w: 'laser', range: 640, rate: 0.35, spd: 0.25, r: 56, large: 1, boss: 1, shape: 61, col: '#ffd24a' },
   wraith: { n: 'Phase Wraith', fac: 'dim', th: 4, hp: 110, sh: 0, arm: 0, dmg: 16, w: 'plasma', range: 360, rate: 0.8, spd: 1.2, r: 15, fast: 1, blink: 1, shape: 70, col: '#ff5cf0' },
   maw: { n: 'Rift Maw', fac: 'dim', th: 30, hp: 5200, sh: 800, arm: 0.3, dmg: 50, w: 'bite', range: 70, rate: 0.5, spd: 0.95, r: 60, large: 1, boss: 1, blink: 1, shape: 71, col: '#ff3cc0' },
-  nullship: { n: 'A Quiet', fac: 'silence', th: 5, hp: 260, sh: 260, arm: 0.4, dmg: 22, w: 'null', range: 440, rate: 0.9, spd: 1, r: 16, shape: 80, col: '#e8e8ff' },
-  eraser: { n: 'An Absence', fac: 'silence', th: 40, hp: 9000, sh: 5000, arm: 0.6, dmg: 70, w: 'null', range: 560, rate: 0.6, spd: 0.5, r: 64, large: 1, boss: 1, shape: 81, col: '#ffffff' }
+  nullship: { n: 'A Quiet', fac: 'silence', th: 5, hp: 260, sh: 260, arm: 0.4, dmg: 13, w: 'null', range: 440, rate: 0.9, spd: 1, r: 16, shape: 80, col: '#e8e8ff' },
+  eraser: { n: 'An Absence', fac: 'silence', th: 40, hp: 9000, sh: 5000, arm: 0.6, dmg: 40, w: 'null', range: 560, rate: 0.6, spd: 0.5, r: 64, large: 1, boss: 1, shape: 81, col: '#ffffff' }
 };
 for (const k in G.ENEMY) G.ENEMY[k].id = k;
 G.FACTIONS = {

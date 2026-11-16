@@ -34,6 +34,11 @@ function makeEnemy(id, x, y, level, elite) {
 }
 F.spawnWave = function (fac, level, budget, boss, cx, cy, spread) {
   const f = G.FACTIONS[fac] || G.FACTIONS.pirate;
+  if (fac === 'silence') {
+    // one strength everywhere, and only one An Absence: the real one, at the centre, spawned on arrival
+    level = G.silenceLevel();
+    if (boss && (F.ents.some(e => e.id === 'eraser') || !(G.silenceOrigin() && G.silenceOrigin().id === G.S.loc && !F.bossSpawned))) boss = false;
+  }
   const s = F.ship, a0 = G.rand.range(0, G.TAU);
   const ox = cx == null ? s.x + Math.cos(a0) * 1050 : cx, oy = cy == null ? s.y + Math.sin(a0) * 1050 : cy;
   const list = [];
@@ -55,9 +60,10 @@ F.spawnRaid = function (fac, level, power) {
   F.raid = true;
   F.spawnWave(fac, level, 5 + G.notoriety() * 3, G.notoriety() > 2.5);
 };
-F.hostileNear = function (rad) {
+F.hostileNear = function (rad, jumping) {
   const s = F.ship;
-  for (const e of F.ents) if (e.team === 1 && !e.def.struct && Math.hypot(e.x - s.x, e.y - s.y) < rad) return true;
+  // the Silence never pins you down: you can always jump away from it
+  for (const e of F.ents) if (e.team === 1 && !e.def.struct && !(jumping && e.def.fac === 'silence') && Math.hypot(e.x - s.x, e.y - s.y) < rad) return true;
   return false;
 };
 F.hostileCount = function () { let n = 0; for (const e of F.ents) if (e.team === 1 && !e.def.struct) n++; return n; };
@@ -133,8 +139,8 @@ F.enter = function (sys, jumped) {
   if (hostileCiv && !sys.capital) F.spawnWave('empire', sys.level, 4 + sys.level * 0.1, false, ox, oy, 300);
   if (S.silence.on) {
     const org = G.silenceOrigin();
-    if (org && org.id === sys.id) { F.spawnWave('silence', Math.max(sys.level, 30), 14, true, 0, sys.star.r + 500, 300); }
-    else if (erased) F.spawnWave('silence', Math.max(sys.level, 30), 10, false);
+    if (org && org.id === sys.id) { F.bossSpawned = false; F.spawnWave('silence', G.silenceLevel(sys), 14, true, 0, sys.star.r + 500, 300); F.bossSpawned = true; }
+    else if (erased) F.spawnWave('silence', G.silenceLevel(sys), 10, false);
   }
   // where the ship appears
   if (sys.home && !jumped) { s.x = ox + 120; s.y = oy + 60; }
@@ -212,7 +218,7 @@ function kill(e) {
   }
   if (d.isDrone) return;
   const L = e.level, sc = G.lootScale(L);
-  S.stats.kills++;
+  S.stats.kills++; if (d.fac !== 'silence' && L > (S.stats.maxKill || 0)) S.stats.maxKill = L; // the Silence is pitched at this
   G.add('credits', 4 * d.th * sc);
   G.compXP(1 + d.th * (1 + L * 0.2));
   const drops = d.boss ? 6 : d.struct ? 5 : G.rand.chance(0.6) ? 1 : 0;

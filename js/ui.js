@@ -85,7 +85,7 @@ UI.toast = function (msg, cls) {
 /* ---------- HUD ---------- */
 UI.hud = function () {
   const S = G.S, F = G.flight, sys = F.sys, st = G.shipStats(), el = UI.el; if (!sys) return;
-  el.loc.innerHTML = '<b>' + esc(sys.name) + '</b><span>' + sys.star.n + ' · ' + G.sectorName(sys.cx, sys.cy) + '</span><span class="lv">DANGER ' + sys.level + '</span>' + (F.erased ? '<span class="lv bad">ERASED SPACE</span>' : '');
+  el.loc.innerHTML = '<b>' + esc(sys.name) + '</b><span>' + sys.star.n + ' · ' + G.sectorName(sys.cx, sys.cy) + '</span><span class="lv">DANGER ' + sys.level + '</span>' + (F.erased ? '<span class="lv bad">ERASED SPACE' + (() => { const o = G.silenceOrigin(); return !o ? '' : o.id === sys.id ? ' · BOSS HERE' : ' · CENTRE: ' + esc(o.name); })() + '</span>' : '');
   // resources
   let h = '';
   const show = G.colonyCount() ? ['credits', 'energy'] : ['credits'];
@@ -130,7 +130,7 @@ UI.hud = function () {
   let al = '';
   if (S.raid.pending) { const p = G.planetById(S.raid.pending.pid); al += '<div class="al bad">RAID on ' + esc(p ? p.name : '?') + ' in ' + Math.max(0, Math.ceil(S.raid.pending.t - S.t)) + 's</div>'; }
   if (G.pwr < 0.999 && G.colonyCount()) al += '<div class="al warn">ENERGY SHORTAGE — colonies at ' + Math.round(G.pwr * 100) + '%</div>';
-  if (S.silence.on) al += '<div class="al quiet">THE SILENCE · radius ' + S.silence.r.toFixed(1) + '</div>';
+  if (S.silence.on) { const nx = G.silenceNext(); al += '<div class="al quiet">THE SILENCE' + (nx.pid && nx.eta < 3600 ? ' · reaches ' + esc(G.planetById(nx.pid).name) + ' in ' + G.fmtT(nx.eta) : '') + '</div>'; }
   if (F.raid) al += '<div class="al bad">RAID IN PROGRESS</div>';
   el.alert.innerHTML = al;
   G.render.minimap(el.mini);
@@ -308,10 +308,11 @@ PANELS.planet = function (pid) {
     h += '<div class="row">' + costHTML(c) + ' ' + btn('Found colony', 'colonize', { id: pid }, why || !G.canAfford(c), 'big') + '</div>' + (why ? '<p class="bad">' + esc(why) + '</p>' : '');
   } else {
     const c = G.colonyCalc(col);
-    h += '<div class="statgrid">' + kv('Population', fmt(col.pop * 1e6) + ' / ' + fmt(c.popcap * 1e6)) + kv('Workforce', Math.round(c.eff * 100) + '%' + (c.eff < 0.99 ? ' <span class="bad">(needs ' + c.workers + 'M workers)</span>' : '')) + kv('Defense', fmt(c.def)) + kv('Energy', '<span class="' + (c.enProd - c.enCons < 0 ? 'bad' : 'good') + '">' + G.fmtRate(c.enProd - c.enCons) + '</span>') + '</div>';
+    h += '<div class="statgrid">' + kv('Population', fmt(col.pop * 1e6) + ' / ' + fmt(c.popcap * 1e6)) + kv('Workforce', Math.round(c.eff * 100) + '%' + (c.eff < 0.99 ? ' <span class="bad">(needs ' + c.workers + 'M workers)</span>' : '')) + kv('Defense', (() => { const rc = G.raidCheck(col, c); return '<span class="' + (rc.state === 'safe' ? 'good' : rc.state === 'risk' ? 'warn' : 'bad') + '">' + fmt(c.def) + '</span> <span class="dim">vs raids ~' + fmt(rc.power) + '</span>'; })()) + kv('Energy', '<span class="' + (c.enProd - c.enCons < 0 ? 'bad' : 'good') + '">' + G.fmtRate(c.enProd - c.enCons) + '</span>') + '</div>';
     let pr = ''; for (const k in c.prod) pr += '<span class="cost">' + ri(k) + G.fmtRate(c.prod[k] * G.pwr) + '</span>';
     h += '<div class="prodline">' + pr + '</div>';
     const iss = colIssues(col, c); if (iss.length) h += '<div class="iss">' + iss.join('<br>') + '</div>';
+    { const rc = G.raidCheck(col, c); if (rc.state !== 'safe') h += '<p class="dim">Raid safety: ' + (G.S.tech.mil2 ? 'about <b>' + rc.need + ' more Missile Platform level' + (rc.need === 1 ? '' : 's') + '</b> (or the equivalent in Shield Generators / Orbital Defense Grids) would hold every raid here today. Raids grow as you add colonies and megastructures.' : 'research <b>Missile Systems</b> (Military) to build Missile Platforms here.') + ' Or just be in this system when a raid arrives and fight it yourself.</p>'; }
     if (col.sys !== S.loc) h += '<div class="row">' + (S.dest === col.sys ? btn('Clear course', 'destclear') : btn('Set course here', 'dest', { id: col.sys }, G.route(col.sys) ? false : 'No charted route')) + '<span class="dim">' + (G.route(col.sys) ? G.route(col.sys).length + ' jump(s) away · megastructures are built while you are in the system' : 'no charted route yet') + '</span></div>';
     if (G.has('governor')) {
       h += '<label class="chk" data-a="auto" data-id="' + pid + '"><i class="' + (col.auto ? 'on' : '') + '"></i> AI Governor builds here automatically</label>';
@@ -359,6 +360,8 @@ function colIssues(col, c) {
   if (G.pwr < 0.999 && c.enCons > c.enProd) out.push('<span class="bad">Uses ' + G.fmt(c.enCons - c.enProd) + ' more energy than it makes; the empire is short</span>');
   if (!c.used) out.push('<span class="bad">IDLE: no buildings</span>');
   else if (c.eff < 0.99) out.push('<span class="warn">Only ' + Math.round(c.eff * 100) + '% staffed: build housing</span>');
+  { const e = G.silenceETA(col.sys); if (e < 1800) out.push('<span class="bad">The Silence reaches it in ' + G.fmtT(e) + '</span>'); }
+  if (c.used) { const rc = G.raidCheck(col, c); if (rc.state !== 'safe') out.push('<span class="' + (rc.state === 'weak' ? 'warn' : 'dim') + '">' + (rc.state === 'weak' ? 'Would lose a raid' : 'Raids are a coin flip') + ': defence ' + G.fmt(rc.def) + ' vs ~' + G.fmt(rc.power) + '</span>'); }
   return out;
 }
 /* Resources that are falling, and who is eating them. */
@@ -373,9 +376,19 @@ function drainHTML() {
   if (G.pwr < 0.999) h += '<li>' + ri('energy') + 'Energy <b class="bad">short</b> <span class="dim">— colonies run at ' + Math.round(G.pwr * 100) + '%. Build Solar Farms or pause hungry buildings.</span></li>';
   return h ? '<div class="card issues"><b>Falling resources</b><ul>' + h + '</ul><p class="dim">Converters stop before they empty a stock (they keep the reserve below), so a falling resource settles at that reserve instead of hitting zero. To free it up, pause or demolish the converters listed.</p></div>' : '';
 }
+const SILENCE_D = () => 'A black circle on the galaxy map that grows slowly, forever. Colonies inside it vanish (they come back when it is stopped). Reality Anchors (Megastructures) protect everything within 8 systems. To stop it: research <b>Null Weaponry</b> (Transcendence), which lets you jump into erased space and triples your damage against it, then fly to its centre and destroy the boss there, An Absence. Silence ships fight at the deepest danger level where you have destroyed an enemy' + (G.S && G.S.stats.maxKill ? ' (for you: ' + G.S.stats.maxKill + ')' : '') + ', wherever they are, and their beams <b>ignore shields</b>: bring hull and armor, kill them fast. They never stop you jumping away: if a fight goes badly, retreat.';
+function silenceHTML() {
+  const S = G.S; if (!S.silence.on) return '';
+  const org = G.silenceOrigin(), nx = G.silenceNext(), lost = Object.keys(S.lost || {}).length;
+  return '<div class="card issues"><b>The Silence is spreading.</b><p class="dim">' + SILENCE_D() + '</p>' +
+    (nx.pid && nx.eta < Infinity ? '<p class="bad">Next colony lost: ' + esc(G.planetById(nx.pid).name) + ' in ' + G.fmtT(nx.eta) + '</p>' : '') +
+    (lost ? '<p>' + lost + ' ' + (lost === 1 ? 'colony is' : 'colonies are') + ' inside it and will return when you stop it.</p>' : '') +
+    (!S.tech.trn2 ? '<p class="warn">You cannot enter it yet: research Null Weaponry first.</p>' : org && org.id !== S.loc ? '<div class="row">' + btn(S.dest === org.id ? 'Clear course' : 'Set course to its centre (' + esc(org.name) + ')', S.dest === org.id ? 'destclear' : 'dest', { id: org.id }) + '</div>' : '') + '</div>';
+}
 PANELS.colonies = function (only) {
   const S = G.S, ids = Object.keys(S.colonies);
   let h = '<div class="statgrid">' + kv('Colonies', ids.length) + kv('Population', fmt((G.totalPop || 0) * 1e6)) + kv('Energy', G.fmtRate((G.enProd || 0) - (G.enCons || 0)) + ' (' + fmt(G.get('energy')) + ' / ' + fmt(G.energyCap || 0) + ')') + kv('Total defense', fmt(G.totalDef || 0)) + kv('Next colony pod', costHTML(G.colonyPodCost())) + '</div>';
+  h += silenceHTML();
   if (!ids.length) return { title: 'COLONIES', html: h + '<p class="empty">No colonies yet. Research Colonial Charter, then orbit a habitable planet (fly to it, press E) and found one.</p>' };
   const rv = S.set.reserve == null ? 60 : S.set.reserve;
   h += '<div class="qty"><span class="dim">Converters keep a reserve of</span>' + [[0, 'nothing'], [60, '1 min'], [300, '5 min'], [900, '15 min']].map(o => '<button class="b' + (rv === o[0] ? ' sel' : '') + '" data-a="reserve" data-v="' + o[0] + '">' + o[1] + '</button>').join('') + '<span class="dim">of each input (income or use, whichever is larger)</span></div>';
@@ -756,7 +769,8 @@ PANELS.guide = function () {
     h += sec('Signature: why you cannot sit still', '<p>In any system that is not yours or a friend\'s, a <b>Signature</b> meter fills while you are there, and twice as fast while you mine. At 100% a wave of whatever lives there finds you, and each wave is bigger than the last; every fifth brings a boss. Mine, then move. Destroying a system\'s pirate base slows it to a third.</p><p>You cannot jump while hostiles are close. Outrun them first (the afterburner helps).</p>');
     h += sec('Fighting', '<p>Your weapons fire by themselves at the nearest hostile in range. <b>You fly.</b> Plasma bolts are slow: sidestep them. Missiles turn slowly: outrun them or fit Point Defense. Keep big ships at the edge of your range. The Nova hits everything around you and deletes incoming shots.</p><div class="counter">Lasers ▸ shields · Plasma ▸ armor · Missiles ▸ slow ships · Drones ▸ large ships · Point defense ▸ missiles and drones · Railguns ▸ a bit of everything</div><p>Enemy types are listed in the Codex once met, with what they carry.</p>');
     h += sec('Dying', '<p>You lose the cargo in your hold and a repair fee: 10% of your credits, but never more than two minutes of your credit income. Banked resources, colonies and upgrades are untouched. You wake up at home with half a hull.</p>');
-    h += sec('Raids', '<p>Once you have colonies, raiders pick one and you get an 80 second warning. Jump there and fight it yourself, or let the colony\'s Defense buildings handle it: the warning shows raid strength against that colony\'s defence. A lost raid costs building levels, population and a little stock.</p>');
+    h += sec('The Silence', '<p>Late in the game (after 3 Dyson stages, or at the end of the Signal story) <b>the Silence</b> wakes. ' + SILENCE_D() + '</p><p>The top of the screen counts down to the next colony it will reach, each colony screen shows its own countdown, and the log warns you 5 minutes before. The Colonies screen has a button to set course to its centre.</p>');
+    h += sec('Raids', '<p>You do not have to be everywhere. Every few minutes raiders pick <b>one random colony</b> and you get an 80 second warning in the log and at the top of the screen. Then one of three things happens:</p><ul><li><b>You are in that system</b> when it lands: you fight the raiders yourself. Win and you get a bounty.</li><li><b>You are elsewhere</b> and the colony\'s <b>defence</b> is at least the raid\'s strength (±20% luck): it wins on its own, and you get salvage.</li><li><b>You are elsewhere and defence is too low</b>: the colony loses up to 2 building levels, 30% of its population and a little stock (never more than two minutes of income). It is a setback, not a loss of the colony.</li></ul><p><b>Defence</b> comes from Defense buildings (Missile Platform, Shield Generator, Orbital Defense Grid; research them in Military), and grows with the system\'s danger level and some research. Every colony screen shows its defence <b>vs raids ~N</b>: green holds every raid, yellow is a coin flip, red loses. It also says how many Missile Platform levels it needs. The Colonies list flags colonies that would lose.</p><p><b>Raid strength</b> grows with the danger level of the colony\'s system, the number of colonies and megastructures you own, and every raid you repel. Deep, dangerous systems need much stronger defences, so settle them only when you can protect them, or accept the odd raid.</p><p>Raids never happen while the game is closed.</p>');
   } else if (tab === 'later') {
     h += sec('Fleet', '<p>Research Fleet Doctrine, build a Shipyard, then buy warships in the Fleet panel. They fly with you and fight on their own. Ships destroyed in battle are gone for good.</p>');
     h += sec('Other civilisations', '<p>Coloured haze on the map is someone\'s territory. Each has a personality and one quirk that changes how they see you. Trade with them, sign pacts for income and research, ally with them, or conquer them by destroying the Citadel in their capital.</p>');

@@ -122,7 +122,8 @@ MP.draw = function () {
     ctx.fillStyle = 'rgba(0,0,0,0.88)'; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 + 0.3 * Math.sin(t * 2)) + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,0.08)'; for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.arc(cx, cy, rr + k * 9, 0, TAU); ctx.stroke(); }
-    if (rr > 40) { ctx.font = '500 12px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText('T H E   S I L E N C E', cx, cy); }
+    if (rr > 40) { ctx.font = '500 12px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillText('T H E   S I L E N C E', cx, cy + Math.min(rr * 0.6, 60)); }
+    { const o = G.silenceOrigin(); if (o) { const ox = X(o.x), oy = Y(o.y), q = (t * 0.5) % 1; ctx.strokeStyle = 'rgba(255,255,255,' + (1 - q) + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(ox, oy, 5 + q * 22, 0, TAU); ctx.stroke(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ox, oy, 3.5, 0, TAU); ctx.fill(); ctx.font = '500 11px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('AN ABSENCE · ' + o.name, ox, oy - 14); } }
     for (const a of G.anchorList()) { const ax = X((a[0] + 0.5) * G.CELL), ay = Y((a[1] + 0.5) * G.CELL); ctx.strokeStyle = 'rgba(255,215,106,0.6)'; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.arc(ax, ay, 8 * G.CELL * z, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
   }
   // story marker

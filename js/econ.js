@@ -320,7 +320,8 @@ G.colonyCalc = function (col) {
   }
   if (sci) out.prod.sci = sci * local * mSci;
   out.prod.credits = credits * mCr * (1 + sb.all);
-  out.def = (out.def + sb.def) * G.mult('colonydef') * (1 + (te.def || 0)) * Math.pow(1.05, sys.level);
+  out.defMul = G.mult('colonydef') * (1 + (te.def || 0)) * Math.pow(1.05, sys.level);
+  out.def = (out.def + sb.def) * out.defMul;
   return out;
 };
 G.rigCost = function (sid) { const n = G.S.sd[sid] && G.S.sd[sid].rigs || 0; return G.scaleCost({ steel: 100, circuits: 40 }, Math.pow(1.7, n) * G.mult('cost')); };
