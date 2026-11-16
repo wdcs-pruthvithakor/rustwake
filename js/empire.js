@@ -513,30 +513,62 @@ G.slowTick = function (dt) {
   if ((T.colev || 0) <= S.t) { T.colev = S.t + 240 + G.rand.range(0, 240); if (G.colonyCount() && S.t > 300) { const ids = Object.keys(S.colonies), col = S.colonies[G.rand.pick(ids)], sys = G.sysById(col.sys); const ev = G.pickEvent('colony', sys.level); if (ev) G.queueEvent(ev, { level: sys.level, col, planet: G.planetById(col.pid), sys }); } }
   if (!S.silence.on && !S.silence.defeated && megaAny('dyson', 3)) G.wakeSilence();
 };
-const GOV_ORDER = ['solar', 'mine', 'habitat', 'lab', 'extractor', 'smelter', 'fabricator', 'harvester', 'refinery', 'deepdrill', 'crystallab', 'foundry', 'city', 'tradehub', 'rescenter', 'geothermal', 'missileplat', 'shieldgen', 'robotfactory', 'nanoforge', 'fusion', 'arcology', 'spaceport'];
+/* AI Governor. Each colony gets one decision at a time, in this order:
+   1. fix an energy shortage, 2. house workers, 3. extract what the planet has / research / credits,
+   4. converters, but only if the inputs have spare supply that would not be drained.
+   It never rebuilds something you demolished and never touches paused buildings. */
+G.govPlan = function (pid) {
+  const S = G.S, col = S.colonies[pid], c = G.colonyCalc(col), p = c.p, ban = col.ban || {}, off = col.off || {}, B = G.BLD;
+  const lvl = id => col.b[id] || 0;
+  const avail = id => B[id] && !G.canBuild(col, id) && !ban[id] && !off[id];
+  const cheap = id => { const cs = G.bldCost(id, lvl(id)); for (const k in cs) if (cs[k] > 0.25 * G.get(k)) return false; return true; };
+  const netE = (G.enProd || 0) - (G.enCons || 0), sup = G.supply || {}, dem = G.demand || {};
+  const spare = k => (sup[k] || 0) - (dem[k] || 0);
+  // can one more level of converter `id` run without starving its inputs?
+  const fed = id => { const d = B[id]; for (const k in d.inp) { const need = d.inp[k] * (c.local || 1) * (c.mInd || 1); if (spare(k) - need < Math.max(0.3 * need, 0.4 * (sup[k] || 0))) return false; } return true; };
+  const eOk = id => !(B[id].pw < 0) || netE + B[id].pw >= 0.5;
+  const choose = (list, why) => { let best = null, bv = Infinity, wait = null; for (const [id, w] of list) { if (!avail(id)) continue; const v = (lvl(id) + 1 + (lvl(id) ? 0 : 4 * c.used / c.slots)) / w; if (v >= bv) continue; if (!cheap(id)) { if (!wait) wait = id; continue; } bv = v; best = id; } return best ? { id: best, why } : wait ? { wait: 'Saving up for ' + B[wait].n + ' (' + why + ')' } : null; };
+  // 1. energy
+  if (netE < Math.max(1, 0.1 * (G.enProd || 0)) || G.pwr < 0.999) {
+    const list = [['solar', (p.res.energy || 1) / 3], ['geothermal', 3 * (G.PTYPES[p.type].glow ? 2 : 1)]];
+    if (fed('fusion')) list.push(['fusion', 8]); if (fed('qreactor')) list.push(['qreactor', 20]);
+    if (S.sd[col.sys] && S.sd[col.sys].mega && S.sd[col.sys].mega.dyson) list.push(['dysoncol', 30]);
+    const r = choose(list, 'energy is short'); if (r) return r;
+  }
+  // 2. workers
+  if (c.popcap + c.robots < c.workers + 2) {
+    const r = choose([['habitat', 1], ['city', 3], ['arcology', 12]].filter(x => eOk(x[0])), 'more housing for workers'); if (r) return r;
+  }
+  if (col.pop + c.robots < c.workers + 1) return { wait: 'Waiting for population to grow into new jobs' };
+  // 3. production
+  const list = [];
+  for (const id in B) { const d = B[id]; if (!d.ext || !eOk(id)) continue; let w = 0; for (const r of d.ext) w = Math.max(w, p.res[r] || 0); if (w) list.push([id, w]); }
+  for (const [id, w] of [['lab', lvl('rescenter') ? 0 : 2], ['rescenter', 4], ['tradehub', 1]]) if (w && eOk(id)) list.push([id, w]);
+  if (c.used >= 4 && lvl('spaceport') < c.used && eOk('spaceport')) list.push(['spaceport', 1.2]);
+  if (c.hab < 60 && eOk('terraformer')) list.push(['terraformer', 1]);
+  if (S.stats.raidsLost > 0 || G.sysById(col.sys).level >= 6) for (const id of ['missileplat', 'shieldgen', 'orbitaldef']) if (eOk(id)) list.push([id, 0.6]);
+  // 4. converters with spare input
+  for (const id of G.CONV_ORDER) { const d = B[id]; if (d.cat !== 'Energy' && eOk(id) && fed(id)) list.push([id, 1.5]); }
+  const r = choose(list, 'growing output'); if (r) return r;
+  return { wait: netE < 0.5 ? 'Needs more energy, but cannot afford a power building' : 'Nothing useful to build right now' };
+};
 G.governorTick = function () {
   if (!G.has('governor')) return;
   const S = G.S; let budget = 3;
   for (const pid in S.colonies) {
     const col = S.colonies[pid]; if (!col.auto) continue;
-    let best = null, bestV = Infinity;
-    for (const id of GOV_ORDER) {
-      if (G.canBuild(col, id)) continue;
-      const c = G.bldCost(id, col.b[id] || 0); let frac = 0;
-      for (const k in c) frac = Math.max(frac, c[k] / Math.max(1, G.get(k)));
-      if (frac > 0.2) continue;                      // never spend more than a fifth of any stock
-      const v = (col.b[id] || 0) + frac;
-      if (v < bestV) { bestV = v; best = id; }
-    }
-    if (best && G.build(pid, best) && --budget <= 0) return;
+    const plan = G.govPlan(pid);
+    if (plan.id) {
+      if (G.build(pid, plan.id)) { col.gov = 'Built ' + G.BLD[plan.id].n + ' ' + col.b[plan.id] + ' (' + plan.why + ')'; G.econTick(0.001); if (--budget <= 0) return; }
+    } else col.gov = plan.wait;
   }
 };
 G.probeTick = function () {
-  if (!G.has('probes')) return;
-  const S = G.S, th = G.habThreshold(); let done = 0;
+  if (!G.has('probes') || G.S.set.probes === false) return;
+  const S = G.S, th = G.habThreshold(), gone = S.gone || {}; let done = 0;
   for (const sid in S.visited) {
     const sys = G.sysById(sid); if (!sys || sys.civ || (S.sd[sid] && S.sd[sid].erased) || G.isErased(sys.cx, sys.cy)) continue;
-    for (const p of sys.planets) if (!S.colonies[p.id] && p.hab >= Math.max(th, 30)) {
+    for (const p of sys.planets) if (!S.colonies[p.id] && !gone[p.id] && p.hab >= Math.max(th, 30) && Object.keys(p.res).some(r => r !== 'energy')) {
       G.colonize(p, true); S.colonies[p.id].auto = true; G.log('Probes founded a colony on ' + p.name + '.', 'good');
       if (++done >= 1) return;
     }

@@ -220,6 +220,7 @@ G.canColonize = function (p) {
 G.colonize = function (p, free) {
   const S = G.S;
   if (!free) { if (G.canColonize(p)) return false; if (!G.pay(G.colonyPodCost())) return false; }
+  if (S.gone) delete S.gone[p.id];
   S.colonies[p.id] = { pid: p.id, sys: p.sys, pop: 2.5, b: {}, auto: false, t: S.t };
   S.stats.colonized++;
   { const d = G.sd(p.sys); d.scan = (d.scan || 0) | (1 << p.idx); }
@@ -237,7 +238,7 @@ G.abandonColony = function (pid) {
   const S = G.S, col = S.colonies[pid]; if (!col) return false;
   if (G.colonyCount() <= 1) return false;
   const ref = G.abandonRefund();
-  delete S.colonies[pid];
+  delete S.colonies[pid]; (S.gone = S.gone || {})[pid] = 1;
   for (const k in ref) G.add(k, ref[k]);
   G.dirty = true;
   G.log('Colony on ' + G.planetById(pid).name + ' abandoned.', 'warn');
@@ -262,13 +263,14 @@ G.canBuild = function (col, id) {
 G.build = function (pid, id) {
   const col = G.S.colonies[pid]; if (!col || G.canBuild(col, id)) return false;
   if (!G.pay(G.bldCost(id, col.b[id] || 0))) return false;
-  col.b[id] = (col.b[id] || 0) + 1; G.dirty = true; return true;
+  col.b[id] = (col.b[id] || 0) + 1; if (col.ban) delete col.ban[id]; G.dirty = true; return true;
 };
 /* Tear a building down: frees its slot and refunds half of everything spent on its levels. */
 G.demolishRefund = function (id, lvl) { const out = {}; for (let l = 0; l < lvl; l++) { const c = G.bldCost(id, l); for (const k in c) out[k] = (out[k] || 0) + c[k]; } for (const k in out) out[k] = Math.floor(out[k] / 2); return out; };
 G.demolish = function (pid, id) {
   const col = G.S.colonies[pid]; if (!col || !col.b[id]) return false;
   const ref = G.demolishRefund(id, col.b[id]); delete col.b[id];
+  (col.ban = col.ban || {})[id] = 1; if (col.off) delete col.off[id];
   for (const k in ref) G.add(k, ref[k]);
   G.dirty = true; return true;
 };
@@ -279,15 +281,18 @@ G.colonyCalc = function (col) {
   const hab = G.planetHab(p, col);
   const b = col.b;
   let house = 4, workers = 0, robots = 0;
-  for (const id in b) { const d = G.BLD[id]; if (d.house) house += d.house * b[id]; if (d.robots) robots += d.robots * b[id]; if (!d.nowork) workers += b[id]; }
+  const off = col.off || {};
+  for (const id in b) { if (off[id]) continue; const d = G.BLD[id]; if (d.house) house += d.house * b[id]; if (d.robots) robots += d.robots * b[id]; if (!d.nowork) workers += b[id]; }
   const popcap = house * (0.35 + hab / 100 * 0.9) * G.mult('popcap') * (1 + (te.pop || 0));
   const eff = workers ? G.clamp((col.pop + robots) / workers, 0.1, 1) : 1;
   const local = (1 + sb.all + (b.spaceport || 0) * 0.06) * eff;
-  const out = { p, hab, popcap, workers, robots, eff, prod: {}, conv: {}, enProd: 0, enCons: 0, def: 0, slots: G.colonySlots(col), used: Object.keys(b).length };
+  const out = { p, hab, popcap, workers, robots, eff, local, prod: {}, conv: {}, enProd: 0, enCons: 0, def: 0, slots: G.colonySlots(col), used: Object.keys(b).length };
   const mMine = G.mult('mine') * (1 + (te.mine || 0) + sb.mine), mInd = G.mult('ind') * (1 + (te.ind || 0) + sb.ind);
   const mSci = G.mult('sci') * (1 + (te.sci || 0)), mEn = G.mult('energy') * (1 + (te.energy || 0)), mCr = G.mult('credits') * (1 + (te.credits || 0));
   let sci = 0, credits = col.pop * 0.12;
+  out.mInd = mInd;
   for (const id in b) {
+    if (off[id]) continue;
     const d = G.BLD[id], l = b[id];
     if (d.ext) for (const r of d.ext) {
       const st = p.res[r]; if (!st) continue;
@@ -354,21 +359,31 @@ G.econTick = function (dt, off) {
   S.res.energy = G.clamp((S.res.energy || 0) + net * dt * off, 0, cap);
   const rates = { energy: net };
   for (const k in tot) { const v = tot[k] * pwr; rates[k] = v; G.add(k, v * dt * off); }
-  // converters, upstream first
+  // converters, upstream first. They never eat a stock below its reserve: N seconds of the larger of
+  // that resource's income and the converter's own appetite (Colonies panel setting, default 60 s).
+  const supply = {}, demand = {}, crun = {}, sec = S.set.reserve == null ? 60 : S.set.reserve, per = dt * off;
+  for (const k in tot) supply[k] = tot[k] * pwr;
   for (const id of G.CONV_ORDER) {
     const c = caps[id]; if (!c) continue;
-    const d = G.BLD[id]; let cyc = c * pwr * dt * off;
-    for (const k in d.inp) cyc = Math.min(cyc, (S.res[k] || 0) / d.inp[k]);
+    const d = G.BLD[id], want = c * pwr * per; let cyc = want, short = null;
+    for (const k in d.inp) {
+      demand[k] = (demand[k] || 0) + d.inp[k] * c * pwr;
+      const keep = sec * Math.max(supply[k] || 0, d.inp[k] * c);
+      const lim = Math.max(0, (S.res[k] || 0) - keep) / d.inp[k];
+      if (lim < cyc) { cyc = lim; short = k; }
+    }
+    crun[id] = { run: want > 0 ? cyc / want : 1, short };
     if (cyc <= 0) continue;
-    for (const k in d.inp) { S.res[k] -= d.inp[k] * cyc; rates[k] = (rates[k] || 0) - d.inp[k] * cyc / (dt * off); }
+    for (const k in d.inp) { S.res[k] -= d.inp[k] * cyc; rates[k] = (rates[k] || 0) - d.inp[k] * cyc / per; }
     for (const k in d.out) {
-      let v = d.out[k] * cyc;
+      let v = d.out[k] * cyc; supply[k] = (supply[k] || 0) + v / per;
       if (k === 'energy') { v *= G.mult('energy') / G.mult('ind'); S.res.energy = Math.min(cap, S.res.energy + v); }
       else if (k === 'sci') { v *= G.mult('sci') / G.mult('ind'); G.add('sci', v); }
       else G.add(k, v);
       rates[k] = (rates[k] || 0) + v / (dt * off);
     }
   }
+  G.supply = supply; G.demand = demand; G.convRun = crun;
   G.rates = rates; G.pwr = pwr; G.energyCap = cap; G.totalPop = pop; G.totalDef = def; G.enProd = enProd; G.enCons = enCons;
   // research
   if (S.cur) {

@@ -251,3 +251,8 @@ body.touch #prompt { bottom: 176px; }
 body.touch.short #prompt { bottom: auto; top: 46%; }
 .b.ghost { background: transparent; border-color: rgba(255,120,120,0.25); color: #d9a0a0; font-size: 11px; padding: 4px 8px; }
 .b.ghost:hover { border-color: rgba(255,120,120,0.6); color: #ffc0c0; }
+.b.back { margin-right: 10px; font-size: 12px; padding: 3px 10px; }
+.iss { font-size: 11.5px; line-height: 1.5; margin-top: 4px; }
+.iss .warn { color: #ffcf6a; } .iss .bad { color: var(--rd); }
+.card.issues { border-color: rgba(255, 110, 110, 0.35); margin: 6px 0 12px; }
+.card.issues ul { margin: 6px 0; padding-left: 18px; font-size: 12.5px; line-height: 1.7; }
