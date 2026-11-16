@@ -564,12 +564,12 @@ G.governorTick = function () {
   }
 };
 G.probeTick = function () {
-  if (!G.has('probes') || G.S.set.probes === false) return;
+  if (!G.has('probes') || G.S.set.probes !== true) return;
   const S = G.S, th = G.habThreshold(), gone = S.gone || {}; let done = 0;
   for (const sid in S.visited) {
     const sys = G.sysById(sid); if (!sys || sys.civ || (S.sd[sid] && S.sd[sid].erased) || G.isErased(sys.cx, sys.cy)) continue;
     for (const p of sys.planets) if (!S.colonies[p.id] && !gone[p.id] && p.hab >= Math.max(th, 30) && Object.keys(p.res).some(r => r !== 'energy')) {
-      G.colonize(p, true); S.colonies[p.id].auto = true; G.log('Probes founded a colony on ' + p.name + '.', 'good');
+      G.colonize(p, true); S.colonies[p.id].auto = S.set.govNew === true && G.has('governor'); G.log('Probes founded a colony on ' + p.name + '. (Turn probes off in Colonies or Settings.)', 'good');
       if (++done >= 1) return;
     }
   }

@@ -266,7 +266,7 @@ G.TECH_LIST = [
   T('ind9', 'Nanobots', 'ind', 6, ['ind7'], 'Unlocks the Nanoforge. +30% industry.', { ind: 0.3 }, ['b_nanoforge']),
   T('ind10', 'Planetary Industry', 'ind', 7, ['ind9'], '+100% industry.', { ind: 1 }),
   T('ind11', 'Quantum Fabrication', 'ind', 8, ['ind10', 'sci5'], 'Unlocks the Quantum Forge.', {}, ['b_qforge']),
-  T('ind12', 'Von Neumann Probes', 'ind', 8, ['ind10', 'ind8'], 'Probes found colonies on habitable worlds in systems you have visited.', {}, ['probes']),
+  T('ind12', 'Von Neumann Probes', 'ind', 8, ['ind10', 'ind8'], 'Probes can found colonies on habitable worlds in systems you have visited. Off until you switch them on (Colonies or Settings).', {}, ['probes']),
   T('enr1', 'Solar Optimization', 'enr', 0, [], '+30% energy.', { energy: 0.3 }),
   T('enr2', 'Gas Refining', 'enr', 1, ['enr1'], 'Unlocks the Gas Harvester and Refinery.', {}, ['b_harvester']),
   T('enr3', 'Geothermal Taps', 'enr', 2, ['enr2'], 'Unlocks the Geothermal Tap.', {}, ['b_geothermal']),

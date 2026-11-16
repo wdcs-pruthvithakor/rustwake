@@ -294,7 +294,7 @@ PANELS.planet = function (pid) {
     const iss = colIssues(col, c); if (iss.length) h += '<div class="iss">' + iss.join('<br>') + '</div>';
     if (G.has('governor')) {
       h += '<label class="chk" data-a="auto" data-id="' + pid + '"><i class="' + (col.auto ? 'on' : '') + '"></i> AI Governor builds here automatically</label>';
-      if (col.auto) h += '<p class="dim">Governor: ' + esc(col.gov || 'thinking…') + '. It fixes energy first, then housing, then extraction and research, and only adds converters when their inputs have spare supply.</p>';
+      h += GOV_D; if (col.auto) h += '<p class="dim">Governor now: ' + esc(col.gov || 'thinking…') + '</p>';
       const bans = Object.keys(col.ban || {}).filter(id => G.BLD[id]);
       if (bans.length) h += '<p class="dim">Governor will not rebuild what you demolished: ' + bans.map(id => G.BLD[id].n + ' ' + btn('allow', 'unban', { id: pid, b: id })).join(' · ') + '</p>';
     }
@@ -315,12 +315,15 @@ PANELS.planet = function (pid) {
       if (rows) h += '<h4>' + cat.toUpperCase() + '</h4><table class="tbl">' + rows + '</table>';
     }
     const only = G.colonyCount() <= 1;
-    h += '<h4>ABANDON</h4><p class="dim">Gives this world up: its buildings and people are lost. You get back ' + costHTML(G.abandonRefund()) + ' (half a pod), and every later pod gets 10% cheaper again.</p><div class="row">' + btn('Abandon colony', 'abandon', { id: pid }, only ? 'You cannot abandon your only colony' : false) + (only ? '<span class="dim">Not possible with only one colony.</span>' : '') + '</div>';
+    h += '<h4>ABANDON</h4><p class="dim">Gives this world up. Every building is demolished and the people leave. You get back ' + costHTML(G.abandonRefund(pid)) + ' (half a pod plus half of what you spent on its buildings), and every later pod gets 10% cheaper again.</p><div class="row">' + btn('Abandon colony', 'abandon', { id: pid }, only ? 'You cannot abandon your only colony' : false) + (only ? '<span class="dim">Not possible with only one colony.</span>' : '') + '</div>';
   }
   h += '</div></div>';
   return { title: (col ? 'COLONY — ' : 'PLANET — ') + esc(p.name), html: h };
 };
 
+const PROBE_D = '<p class="chkd">When on, probes found one free colony every 45 seconds on a habitable world (30%+ habitability, something to mine) in a system you have visited. They skip alien space and worlds you abandoned. The colony is free, but every colony makes the next pod 10% dearer and draws a little more raider attention. Off by default.</p>';
+const GOVNEW_D = '<p class="chkd">When on, colonies the probes found start with the AI Governor building on them. When off, they start empty and you build them yourself. Off by default.</p>';
+const GOV_D = '<p class="chkd">The AI Governor spends your stock on buildings for this colony, at most a quarter of any resource per build. Order: fix energy, then housing, then mines, research and credits, and converters only when their inputs have spare supply. It never demolishes and never rebuilds what you demolished.</p>';
 /* What is wrong with one colony, in plain words. */
 function colIssues(col, c) {
   const out = [], B = G.BLD, R = G.rates || {}, off = col.off || {}, seen = {};
@@ -355,9 +358,9 @@ PANELS.colonies = function (only) {
   if (!ids.length) return { title: 'COLONIES', html: h + '<p class="empty">No colonies yet. Research Colonial Charter, then orbit a habitable planet (fly to it, press E) and found one.</p>' };
   const rv = S.set.reserve == null ? 60 : S.set.reserve;
   h += '<div class="qty"><span class="dim">Converters keep a reserve of</span>' + [[0, 'nothing'], [60, '1 min'], [300, '5 min'], [900, '15 min']].map(o => '<button class="b' + (rv === o[0] ? ' sel' : '') + '" data-a="reserve" data-v="' + o[0] + '">' + o[1] + '</button>').join('') + '<span class="dim">of each input (income or use, whichever is larger)</span></div>';
-  h += '<div class="row">';
-  if (G.has('governor')) h += btn('Governors: all on', 'autoall', { v: 1 }) + btn('all off', 'autoall', { v: 0 });
-  if (G.has('probes')) h += '<label class="chk" data-a="probes"><i class="' + (S.set.probes !== false ? 'on' : '') + '"></i> Von Neumann probes found new colonies (never on worlds you abandoned)</label>';
+  h += '<div class="ctl">';
+  if (G.has('governor')) h += '<div class="row">' + btn('Governors: all on', 'autoall', { v: 1 }) + btn('all off', 'autoall', { v: 0 }) + '</div><p class="chkd" style="margin-left:2px">Switches the AI Governor on or off for every colony at once, and for colonies probes found later.</p>';
+  if (G.has('probes')) h += '<label class="chk" data-a="probes"><i class="' + (S.set.probes === true ? 'on' : '') + '"></i> Von Neumann probes found new colonies by themselves</label>' + PROBE_D;
   h += '</div>' + drainHTML();
   const idle = ids.filter(pid => !Object.keys(S.colonies[pid].b).length).length;
   if (idle) h += '<p class="warn">' + idle + ' ' + (idle === 1 ? 'colony has' : 'colonies have') + ' no buildings and ' + (idle === 1 ? 'is' : 'are') + ' marked IDLE below. Open one to build on it, or abandon it to get half a pod back and make the next pod cheaper.</p>';
@@ -580,6 +583,8 @@ PANELS.settings = function () {
   let h = '<div class="cols"><div class="card grow"><h3>CONTROLS</h3>' + kv('<kbd>W A S D</kbd> / arrows', 'Fly') + kv('<kbd>Shift</kbd>', 'Afterburner (uses energy)') + kv('<kbd>Space</kbd>', 'Mine nearest asteroid') + kv('<kbd>E</kbd>', 'Orbit / dock / investigate') + kv('<kbd>Q</kbd>', 'Nova burst (25 energy, 18s cooldown)') + kv('<kbd>M</kbd>', 'Galaxy map') + kv('<kbd>2</kbd>–<kbd>0</kbd>', 'Panels') + kv('Mouse wheel', 'Zoom') + kv('Click', 'Fly there, or focus a hostile') +
     '<h3>HOW NOT TO DIE</h3><p class="dim">Wild systems track your <b>signature</b>. It climbs while you linger and climbs faster while you mine. At 100% a wave finds you, and each wave is bigger than the last. Mine, then move. Your own systems and friendly territory are safe harbour. You cannot jump with hostiles close by, so run first. Dying costs your cargo and a tenth of your credits (never more than two minutes of credit income). Do not fly into the star.</p></div>';
   h += '<div class="card grow"><h3>GAME</h3><label class="chk" data-a="set" data-k="sfx"><i class="' + (S.set.sfx ? 'on' : '') + '"></i> Sound effects</label><label class="chk" data-a="set" data-k="music"><i class="' + (S.set.music ? 'on' : '') + '"></i> Ambient drone</label><label class="chk" data-a="set" data-k="shake"><i class="' + (S.set.shake ? 'on' : '') + '"></i> Screen shake</label>';
+  if (G.has('probes')) h += '<label class="chk" data-a="probes"><i class="' + (S.set.probes === true ? 'on' : '') + '"></i> Von Neumann probes found colonies by themselves</label>' + PROBE_D;
+  if (G.has('governor')) h += '<label class="chk" data-a="govnew"><i class="' + (S.set.govNew === true ? 'on' : '') + '"></i> Turn the AI Governor on for new probe colonies</label>' + GOVNEW_D;
   h += '<div class="row wrap">' + btn('Save now', 'save') + btn('Export save', 'export') + btn('Import save', 'import') + btn('Wipe everything', 'wipe', null, false, 'danger') + '</div><textarea id="savebox" placeholder="Exported saves appear here. Paste one and press Import."></textarea>';
   h += '<p class="dim">Universe seed ' + S.seed + ' · everything is stored in this browser only. The galaxy is generated from the seed; only your changes are saved.</p></div></div>';
   return { title: 'MENU', html: h };
@@ -615,7 +620,8 @@ UI.act = function (a, d, node) {
     case 'colsys': UI.go('colonies', d.id); return;
     case 'back': UI.back(); return;
     case 'reserve': S.set.reserve = +d.v; break;
-    case 'probes': S.set.probes = S.set.probes === false; break;
+    case 'probes': S.set.probes = S.set.probes !== true; break;
+    case 'govnew': S.set.govNew = S.set.govNew !== true; break;
     case 'pause': { const col = S.colonies[d.id]; if (!col) break; col.off = col.off || {}; if (col.off[d.b]) delete col.off[d.b]; else col.off[d.b] = 1; G.dirty = true; G.econTick(0.001); break; }
     case 'unban': { const col = S.colonies[d.id]; if (col && col.ban) delete col.ban[d.b]; break; }
     case 'demolish': {
@@ -624,19 +630,30 @@ UI.act = function (a, d, node) {
       G.demolish(d.id, d.b); break;
     }
     case 'abandon': {
-      if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = 'Really abandon? Click again.'; return; }
+      if (node.dataset.sure !== '1') { node.dataset.sure = '1'; UI.hold = Date.now() + 6000; const r = G.abandonRefund(d.id); node.textContent = 'Sure? Refund ' + Object.keys(r).map(k => G.fmt(r[k]) + ' ' + G.RES[k].n).join(', '); return; }
       if (G.abandonColony(d.id)) { if (F.sys) F.safe = F.isSafe(); UI.stack.length ? UI.back() : UI.open('colonies'); return; } break;
     }
     case 'colonize': { const p = G.planetById(d.id); if (G.colonize(p)) { UI.dock(); if (F.sys) F.safe = true; } break; }
     case 'build': if (!G.build(d.id, d.b)) quiet = true; break;
-    case 'buildmax': { let n = 0; while (n < 100 && G.build(d.id, d.b)) n++; if (n) say('Raised ' + G.BLD[d.b].n + ' by ' + n + ' level' + (n > 1 ? 's' : '') + '.'); else quiet = true; break; }
-    case 'upgmax': { let n = 0; while (n < 100 && G.buyUpg(d.id)) n++; if (n) { say(G.UPG[d.id].n + ' +' + n + '.'); if (d.id === 'scanner') G.reveal(G.here()); } else quiet = true; break; }
+    case 'buildmax': case 'upgmax': if (node.dataset.sure !== '1') {
+      // dry run: buy as far as possible, note the cost, then put everything back
+      const res0 = Object.assign({}, S.res), col = S.colonies[d.id], lv0 = a === 'buildmax' ? col && col.b[d.b] : S.ship.up[d.id], ban0 = col && col.ban && Object.assign({}, col.ban);
+      let n = 0; while (n < 100 && (a === 'buildmax' ? G.build(d.id, d.b) : G.buyUpg(d.id))) n++;
+      const spent = []; for (const k in res0) if (res0[k] - (S.res[k] || 0) > 0.5) spent.push(G.fmt(res0[k] - S.res[k]) + ' ' + G.RES[k].n + ' (' + Math.round((res0[k] - S.res[k]) / res0[k] * 100) + '% of it)');
+      for (const k in S.res) S.res[k] = res0[k] || 0;
+      if (a === 'buildmax') { col.b[d.b] = lv0; if (ban0) col.ban = ban0; } else S.ship.up[d.id] = lv0; G.dirty = true;
+      if (!n) { quiet = true; break; }
+      node.dataset.sure = '1'; UI.hold = Date.now() + 6000; node.textContent = '+' + n + ' levels for ' + spent.join(', ') + '. Click again';
+      node.classList.add('confirm'); return;
+    }
+    if (a === 'upgmax') { let n = 0; while (n < 100 && G.buyUpg(d.id)) n++; if (n) { say(G.UPG[d.id].n + ' +' + n + '.'); if (d.id === 'scanner') G.reveal(G.here()); } break; }
+    { let n = 0; while (n < 100 && G.build(d.id, d.b)) n++; if (n) say('Raised ' + G.BLD[d.b].n + ' by ' + n + ' level' + (n > 1 ? 's' : '') + '.'); else quiet = true; break; }
     case 'paint': if (S.cos.own[d.id]) S.cos.paint = d.id; break;
     case 'trail': if (S.cos.own[d.id]) S.cos.trail = d.id; break;
     case 'tsel': UI.techSel = d.id; break;
     case 'stock': UI.tab.empire = 'res'; UI.open('empire'); return;
     case 'auto': S.colonies[d.id].auto = !S.colonies[d.id].auto; break;
-    case 'autoall': for (const pid in S.colonies) S.colonies[pid].auto = d.v === '1'; break;
+    case 'autoall': for (const pid in S.colonies) S.colonies[pid].auto = d.v === '1'; S.set.govNew = d.v === '1'; break;
     case 'colpage': UI.tab.colpage = Math.max(0, (UI.tab.colpage || 0) + (+d.d)); break;
     case 'panom': { const p = G.planetById(d.id), sys = G.sysById(p.sys); const ev = G.pickEvent('planet', sys.level); const sd = G.sd(p.sys); sd.pdone = (sd.pdone || 0) | (1 << p.idx); UI.close(); if (ev) UI.showEvent(ev, { level: sys.level, sys, planet: p }); return; }
     case 'research': G.startResearch(d.id); break;
@@ -706,7 +723,7 @@ PANELS.guide = function () {
     h += sec('Resource shapes', '<p>The colour tells you which resource; the shape tells you how rare it is.</p><div class="legend">' + ['common', 'uncommon', 'rare', 'legendary', 'refined', 'advanced', 'exotic'].map(t => { const id = G.RES_ORDER.find(r => G.RES[r].t === t); return '<span>' + ri(id) + G.TIER_NAME[t] + '</span>'; }).join('') + '</div><p class="dim">Every cost in the game names the resource next to the number. Red means you do not have enough banked.</p>');
     h += sec('Controls', kv(T ? 'Left stick' : '<kbd>W A S D</kbd> / arrows / click', 'Fly') + kv(k('Space', 'MINE') + ' hold', 'Mine the nearest rock') + kv(k('E', 'tap the prompt'), 'Orbit, dock, investigate') + kv(k('Shift', 'BOOST') + ' hold', 'Afterburner, burns energy') + kv(k('Q', 'NOVA'), 'Area blast: 25 energy, 18s cooldown') + kv(T ? 'Pinch' : 'Mouse wheel', 'Zoom') + kv(T ? 'Tap a hostile' : 'Click a hostile', 'Focus fire on it') + (T ? kv('<kbd>MENU</kbd>', 'All panels') : kv('<kbd>M</kbd> <kbd>2</kbd>–<kbd>0</kbd> <kbd>H</kbd>', 'Map, panels, this guide')));
   } else if (tab === 'colony') {
-    h += sec('What a colony needs', '<p><b>Slots</b>: each kind of building takes one slot; levels are unlimited. Bigger planets and moons mean more slots. Changed your mind? <b>Demolish</b> a building to free its slot and get half of what you spent on it back, or <b>Pause</b> it to stop it using energy, workers and inputs.</p><p><b>Converters</b> (Smelter, Fabricator, Refinery…) turn one resource into another. They never empty a stock: they keep a reserve (1 minute of income by default; change it at the top of the Colonies screen). If a resource is falling, the Colonies screen lists which converters are eating it.</p><p><b>AI Governor</b>: fixes energy first, then housing, then extraction and research, and only adds converters when the inputs have spare supply. It never rebuilds something you demolished.</p><p><b>Workers</b>: every building level needs 1M population. If "Workforce" is under 100%, build Habitats (or wait: population grows toward its housing cap, faster on habitable worlds).</p><p><b>Energy</b>: most buildings draw energy; Solar Farms make it. If the empire-wide energy store hits zero, everything slows. The warning appears top-centre.</p><p><b>Richness</b>: the stars beside each resource. A Mine on a ★★★★ iron world makes four times what it does on ★.</p>');
+    h += sec('What a colony needs', '<p><b>Slots</b>: each kind of building takes one slot; levels are unlimited. Bigger planets and moons mean more slots. Changed your mind? <b>Demolish</b> a building to free its slot and get half of what you spent on it back, or <b>Pause</b> it to stop it using energy, workers and inputs.</p><p><b>Converters</b> (Smelter, Fabricator, Refinery…) turn one resource into another. They never empty a stock: they keep a reserve (1 minute of income by default; change it at the top of the Colonies screen). If a resource is falling, the Colonies screen lists which converters are eating it.</p><p><b>AI Governor</b> (optional, per colony): fixes energy first, then housing, then extraction and research, and only adds converters when the inputs have spare supply. It never rebuilds something you demolished.</p><p><b>Workers</b>: every building level needs 1M population. If "Workforce" is under 100%, build Habitats (or wait: population grows toward its housing cap, faster on habitable worlds).</p><p><b>Energy</b>: most buildings draw energy; Solar Farms make it. If the empire-wide energy store hits zero, everything slows. The warning appears top-centre.</p><p><b>Richness</b>: the stars beside each resource. A Mine on a ★★★★ iron world makes four times what it does on ★.</p>');
     h += sec('Which worlds to settle', '<p>Distance from home does not matter: a far colony costs and produces the same as a near one. What matters is the planet. Each colony makes the next pod 10% dearer and draws a little more raider attention, so a colony with no buildings is a cost. Pick worlds with resources you need, good habitability and plenty of slots, and build on them. The planet screen sums this up under "Is it worth it?".</p><p>A colony you regret can be abandoned from its screen: you get back half a pod and the next pod gets cheaper again.</p>');
     h += sec('Production chains', '<p>Raw ore is turned into better materials by Industry buildings, and those feed the next tier:</p><p class="chain">Iron → Steel → Advanced Alloy → Nanomaterial → Quantum Material</p><p class="chain">Hydrogen → Fusion Fuel → Antimatter → Exotic Energy</p><p class="chain">Crystal → Refined Crystal → Quantum Crystal → Neural Crystal</p><p>A converter only runs if its inputs are in stock. If a number on the top bar is red and negative, something is eating that resource faster than you make it: build more of whatever produces it.</p>');
     h += sec('Automation', '<p>Research in the Industry branch removes the chores: <b>Mining Drones</b> mine beside you, <b>Mining Rigs</b> (Megastructures panel) farm a belt forever, <b>Quantum Uplink</b> banks cargo instantly, <b>AI Governors</b> build colonies for you, and <b>Von Neumann Probes</b> found new ones.</p><p>Colonies keep producing while the game is closed, at reduced efficiency, for up to 12 hours.</p>');

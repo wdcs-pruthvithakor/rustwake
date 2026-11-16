@@ -233,11 +233,17 @@ G.colonize = function (p, free) {
   return true;
 };
 /* Give a colony up. Refunds half of what a pod would cost afterwards, and lowers the price of the next pod. */
-G.abandonRefund = function () { const c = G.scaleCost({ iron: 150, copper: 40, crystal: 50 }, Math.pow(1.1, Math.max(0, G.colonyCount() - 1)) * G.mult('cost')); for (const k in c) c[k] = Math.floor(c[k] / 2); return c; };
+/* Abandoning gives back half a pod plus half of everything spent on the colony's buildings. */
+G.abandonRefund = function (pid) {
+  const c = G.scaleCost({ iron: 150, copper: 40, crystal: 50 }, Math.pow(1.1, Math.max(0, G.colonyCount() - 1)) * G.mult('cost')); for (const k in c) c[k] = Math.floor(c[k] / 2);
+  const col = pid && G.S.colonies[pid];
+  if (col) for (const id in col.b) { const r = G.demolishRefund(id, col.b[id]); for (const k in r) c[k] = (c[k] || 0) + r[k]; }
+  return c;
+};
 G.abandonColony = function (pid) {
   const S = G.S, col = S.colonies[pid]; if (!col) return false;
   if (G.colonyCount() <= 1) return false;
-  const ref = G.abandonRefund();
+  const ref = G.abandonRefund(pid);
   delete S.colonies[pid]; (S.gone = S.gone || {})[pid] = 1;
   for (const k in ref) G.add(k, ref[k]);
   G.dirty = true;
