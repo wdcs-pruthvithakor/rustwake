@@ -436,6 +436,7 @@ PANELS.research = function () {
   if (S.cur) { const need = G.techCost(S.cur.id), nm = G.TECH[S.cur.id] ? G.TECH[S.cur.id].n : G.REPEAT.find(r => r.id === S.cur.id).n, rate = G.rates.sci || 0; h += '<div class="grow"><b>Researching: ' + esc(nm) + '</b>' + bar(S.cur.p / need, '#b89bff', fmt(S.cur.p) + ' / ' + fmt(need) + (rate > 0 ? ' · ' + G.fmtT((need - S.cur.p) / rate) : '')) + '</div>'; }
   else h += '<div class="grow"><b>Idle.</b> <span class="dim">' + fmt(G.get('sci')) + ' research banked. Pick something below.</span></div>';
   h += '<div>' + kv('Research income', G.fmtRate(G.rates.sci || 0)) + '</div></div>';
+  if (!S.tech.soc1) h += '<p class="warn">Research <b>Colonial Charter</b> (Society row) soon: colonies are where real research comes from. Until then it comes from scanning planets, visiting new systems, and a small trickle from your ship\'s lab.</p>';
   if (S.queue.length) h += '<div class="queue">Queue: ' + S.queue.map((q, i) => '<span class="cost" data-a="unq" data-i="' + i + '">' + esc(G.TECH[q] ? G.TECH[q].n : G.REPEAT.find(r => r.id === q).n) + ' ✕</span>').join('') + '</div>';
   { const t = G.TECH[UI.techSel];
     if (t && G.techVisible(t)) {
@@ -704,7 +705,7 @@ UI.act = function (a, d, node) {
     case 'autoall': for (const pid in S.colonies) S.colonies[pid].auto = d.v === '1'; S.set.govNew = d.v === '1'; break;
     case 'colpage': UI.tab.colpage = Math.max(0, (UI.tab.colpage || 0) + (+d.d)); break;
     case 'panom': { const p = G.planetById(d.id), sys = G.sysById(p.sys); const ev = G.pickEvent('planet', sys.level); const sd = G.sd(p.sys); sd.pdone = (sd.pdone || 0) | (1 << p.idx); UI.close(); if (ev) UI.showEvent(ev, { level: sys.level, sys, planet: p }); return; }
-    case 'research': G.startResearch(d.id); break;
+    case 'research': if (!G.startResearch(d.id) && S.queue.length >= 6) say('The queue is full (6). Remove something from it first (tap ✕ on a queued item).'); break;
     case 'unq': S.queue.splice(+d.i, 1); break;
     case 'ship': if (!G.buyShip(d.id, +d.n)) quiet = true; else say(F.refreshEscorts() ? 'Built. They have joined your formation.' : 'Built. They will join as soon as the fighting stops.'); break;
     case 'civ': UI.arg = d.id; UI.refresh(true); return;

@@ -370,6 +370,8 @@ G.econTick = function (dt, off) {
     else col.pop += (c.popcap - col.pop) * (1 - Math.exp(-0.05 * dt));
     pop += col.pop;
   }
+  // the ship's own lab: a small research trickle that never runs out, so nothing can strand you before your first colony
+  tot.sci = (tot.sci || 0) + 0.3 * G.mult('sci');
   // rigs, star lifters, dyson energy
   const mMine = G.mult('mine');
   for (const sid in S.sd) {
@@ -440,7 +442,7 @@ G.canResearch = function (id) {
 G.startResearch = function (id) {
   const S = G.S; if (!G.canResearch(id)) return false;
   if (S.cur && S.cur.id === id) return false;
-  if (S.cur) { if (!S.queue.includes(id) && S.queue.length < 6) S.queue.push(id); return true; }
+  if (S.cur) { if (S.queue.includes(id)) return true; if (S.queue.length >= 6) return false; S.queue.push(id); return true; }
   S.cur = { id, p: 0 }; return true;
 };
 G.finishResearch = function () {
