@@ -114,7 +114,6 @@ UI.hud = function () {
   if (!el.sbMain) { el.shipbox.innerHTML = '<div></div><div></div>'; el.sbMain = el.shipbox.children[0]; el.sbDest = el.shipbox.children[1]; }
   el.sbMain.innerHTML = sb;
   const dl = destLine(); if (dl !== el.sbDestHTML) { el.sbDestHTML = dl; el.sbDest.innerHTML = dl; } // only redraw when it changes, so taps land
-  if (UI.compact) { const b = Math.max(el.shipbox.getBoundingClientRect().bottom, el.mission.getBoundingClientRect().bottom); el.toasts.style.top = Math.round(b + 8) + 'px'; } else el.toasts.style.top = '';
   // objective
   const m = G.MISSIONS[S.mission];
   el.mission.innerHTML = m ? '<h4>OBJECTIVE <span>' + (S.mission + 1) + ' / ' + G.MISSIONS.length + '</span></h4><b>' + esc(m.t) + '</b><p>' + esc(typeof m.d === 'function' ? m.d() : m.d) + '</p>' + (m.p ? '<em>' + esc(m.p()) + '</em>' : '') : '';
@@ -130,9 +129,20 @@ UI.hud = function () {
   let al = '';
   if (S.raid.pending) { const p = G.planetById(S.raid.pending.pid); al += '<div class="al bad">RAID on ' + esc(p ? p.name : '?') + ' in ' + Math.max(0, Math.ceil(S.raid.pending.t - S.t)) + 's</div>'; }
   if (G.pwr < 0.999 && G.colonyCount()) al += '<div class="al warn">ENERGY SHORTAGE — colonies at ' + Math.round(G.pwr * 100) + '%</div>';
-  if (S.silence.on) { const nx = G.silenceNext(); al += '<div class="al quiet">THE SILENCE' + (nx.pid && nx.eta < 3600 ? ' · reaches ' + esc(G.planetById(nx.pid).name) + ' in ' + G.fmtT(nx.eta) : '') + '</div>'; }
+  if (S.silence.on) {
+    const nx = G.silenceNext(), o = G.silenceOrigin();
+    if (F.erased && o) al += '<div class="al quiet">' + (o.id === S.loc ? 'BOSS HERE · white arrow' : 'ERASED SPACE · centre: ' + esc(o.name)) + '</div>';
+    else al += '<div class="al quiet">THE SILENCE' + (nx.pid && nx.eta < 3600 ? ' · reaches ' + esc(G.planetById(nx.pid).name) + ' in ' + G.fmtT(nx.eta) : '') + '</div>';
+  }
   if (F.raid) al += '<div class="al bad">RAID IN PROGRESS</div>';
-  el.alert.innerHTML = al;
+  if (al !== el.alertHTML) { el.alertHTML = al; el.alert.innerHTML = al; }
+  // phones: in portrait the bottom belongs to the controls, so alerts and toasts stack under the HUD boxes
+  if (UI.compact) {
+    let b = Math.max(el.shipbox.getBoundingClientRect().bottom, el.mission.getBoundingClientRect().bottom) + 8;
+    if (innerHeight > innerWidth) { el.alert.style.top = Math.round(b) + 'px'; el.alert.style.bottom = 'auto'; if (al) b = el.alert.getBoundingClientRect().bottom + 6; }
+    else { el.alert.style.top = ''; el.alert.style.bottom = ''; }
+    el.toasts.style.top = Math.round(b) + 'px';
+  } else { el.toasts.style.top = ''; el.alert.style.top = ''; el.alert.style.bottom = ''; }
   G.render.minimap(el.mini);
 };
 

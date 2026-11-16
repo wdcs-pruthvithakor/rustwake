@@ -36,8 +36,10 @@ G.route = function (toId) {
   const R = G.shipStats().jump; if (!(R > 0)) return null;
   const kn = Object.keys(S.known), key = S.loc + '|' + toId + '|' + Math.round(R) + '|' + kn.length + '|' + (S.silence.on ? Math.round(S.silence.r) : 0);
   if (G._route && G._route.key === key) return G._route.path;
-  const ok = s => S.known[s.id] && (s.id === toId || S.tech.trn2 || !G.isErased(s.cx, s.cy));
-  const useList = Math.pow(2 * R / G.CELL, 2) > kn.length, all = useList ? kn.map(G.sysById).filter(Boolean) : null;
+  // with Null Weaponry, erased space needs no charting: there is nothing in it to chart
+  const voidNav = S.silence.on && S.tech.trn2;
+  const ok = s => (S.known[s.id] || (voidNav && G.isErased(s.cx, s.cy))) && (s.id === toId || S.tech.trn2 || !G.isErased(s.cx, s.cy));
+  const useList = !voidNav && Math.pow(2 * R / G.CELL, 2) > kn.length, all = useList ? kn.map(G.sysById).filter(Boolean) : null;
   const near = s => useList ? all.filter(t => Math.hypot(t.x - s.x, t.y - s.y) <= R) : G.systemsNear(s.x, s.y, R);
   const h = s => Math.hypot(s.x - to.x, s.y - to.y) / R;
   const open = [[h(from), 0, from.id]], g = {}, prev = {}; g[from.id] = 0; let n = 0, found = false;
@@ -83,7 +85,7 @@ G.arrive = function (sys, jumped) {
   // erased space is empty: point the way to the one system that matters
   if (S.silence.on && G.isErased(sys.cx, sys.cy)) {
     const org = G.silenceOrigin();
-    if (org && org.id === sys.id) G.log('An Absence is here, at the centre of the Silence. Follow the yellow arrow at the screen edge.', 'epic');
+    if (org && org.id === sys.id) G.log('An Absence is here, at the centre of the Silence. Follow the white arrow marked BOSS at the screen edge.', 'epic');
     else if (org) { if (!S.dest && G.route(org.id)) S.dest = org.id; G.log('Erased space: nothing here but its ships, and they keep coming. Its centre, and the boss, is ' + org.name + (G.route(org.id) ? ' (' + G.route(org.id).length + ' jumps). Course set.' : '. Open the map to find a way in.'), 'bad'); }
   }
   if (jumped && G.sfx) G.sfx('jump');
