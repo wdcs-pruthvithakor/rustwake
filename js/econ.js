@@ -324,6 +324,16 @@ G.colonyCalc = function (col) {
   return out;
 };
 G.rigCost = function (sid) { const n = G.S.sd[sid] && G.S.sd[sid].rigs || 0; return G.scaleCost({ steel: 100, circuits: 40 }, Math.pow(1.7, n) * G.mult('cost')); };
+// Each rig works every belt in its system: 1.5/s per common resource on a belt of richness 1, before research bonuses.
+G.rigRates = function (sid, n) {
+  const sys = G.sysById(sid), o = {}; if (!sys || !n) return o;
+  const m = G.mult('mine');
+  for (const b of sys.belts) for (const r of new Set(b.res)) {
+    const t = G.RES[r].t; if (t === 'legendary' || t === 'mythic') continue;
+    o[r] = (o[r] || 0) + 1.5 * n * b.rich * m * (t === 'rare' ? 0.2 : t === 'uncommon' ? 0.5 : 1);
+  }
+  return o;
+};
 G.buildRig = function (sid) {
   const sys = G.sysById(sid); if (!G.has('rigs') || !sys.belts.length) return false;
   const d = G.sd(sid); if ((d.rigs || 0) >= sys.belts.length * 5) return false;
@@ -350,7 +360,7 @@ G.econTick = function (dt, off) {
   const mMine = G.mult('mine');
   for (const sid in S.sd) {
     const d = S.sd[sid]; if (d.erased) continue;
-    if (d.rigs) { const sys = G.sysById(sid); if (sys) for (const b of sys.belts) for (const r of b.res) { if (G.RES[r].t === 'legendary' || G.RES[r].t === 'mythic') continue; tot[r] = (tot[r] || 0) + 0.12 * d.rigs * b.rich * mMine / b.res.length * (G.RES[r].t === 'rare' ? 0.15 : G.RES[r].t === 'uncommon' ? 0.5 : 1); } }
+    if (d.rigs) { const o = G.rigRates(sid, d.rigs); for (const r in o) tot[r] = (tot[r] || 0) + o[r]; }
     const m = d.mega; if (!m) continue;
     if (m.dyson) enProd += 400 * Math.pow(5, m.dyson) * G.mult('energy');
     if (m.starlifter) { const v = 2500 * mMine; for (const r of ['iron', 'copper', 'silicon', 'gas']) tot[r] = (tot[r] || 0) + v; for (const r of ['titanium', 'uranium', 'platinum']) tot[r] = (tot[r] || 0) + v * 0.2; }
